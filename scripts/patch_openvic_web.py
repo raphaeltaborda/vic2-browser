@@ -745,11 +745,27 @@ sound_effect_cpp = sim / "src/openvic-simulation/misc/SoundEffect.cpp"
 se = sound_effect_cpp.read_text(encoding="utf-8")
 if "#include <cstdio>" not in se:
     se = se.replace('#include "SoundEffect.hpp"\n', '#include "SoundEffect.hpp"\n\n#include <cstdio>\n', 1)
-sound_define_new = """	auto file_callback = [&dataloader, &file, sfx_identifier](std::string_view val) -> bool {
+if "#include <openvic-dataloader/v2script/AbstractSyntaxTree.hpp>" not in se:
+    se = se.replace(
+        '#include "openvic-simulation/dataloader/Dataloader.hpp"\n',
+        '#include "openvic-simulation/dataloader/Dataloader.hpp"\n\n#include <openvic-dataloader/v2script/AbstractSyntaxTree.hpp>\n',
+        1,
+    )
+
+sound_define_start_marker = "bool SoundEffectManager::_load_sound_define("
+sound_file_start_marker = "bool SoundEffectManager::load_sound_defines_file("
+sound_define_start = se.find(sound_define_start_marker)
+sound_file_start = se.find(sound_file_start_marker, sound_define_start)
+if sound_define_start == -1 or sound_file_start == -1:
+    raise SystemExit("Could not structurally locate SoundEffect loader functions.")
+
+sound_define_new = r'''bool SoundEffectManager::_load_sound_define(Dataloader const& dataloader, std::string_view sfx_identifier, ast::NodeCPtr root) {
+	std::filesystem::path file {};
+	auto file_callback = [&dataloader, &file, sfx_identifier](std::string_view val) -> bool {
 		memory::string lookup = memory::fmt::format("sound/{}", val);
 #if defined(__EMSCRIPTEN__)
 		std::printf(
-			"[WebLoadRaw] sound define %.*s -> %s\\n",
+			"[WebLoadRaw] sound define %.*s -> %s\n",
 			static_cast<int>(sfx_identifier.size()), sfx_identifier.data(), lookup.c_str()
 		);
 		std::fflush(stdout);
@@ -757,34 +773,180 @@ sound_define_new = """	auto file_callback = [&dataloader, &file, sfx_identifier]
 		file = dataloader.lookup_file(lookup, false);
 #if defined(__EMSCRIPTEN__)
 		std::printf(
-			"[WebLoadRaw] sound define resolved: %s\\n",
+			"[WebLoadRaw] sound define resolved: %s\n",
 			file.empty() ? "<missing>" : file.string().c_str()
 		);
 		std::fflush(stdout);
 #endif
 		if (file.empty()) {
-			spdlog::warn_s("Lookup for \\"{}\\" failed!", lookup);
+			spdlog::warn_s("Lookup for \"{}\" failed!", lookup);
 		}
 		return true;
-	};"""
-if sound_define_new not in se:
-    callback_start_marker = "auto file_callback = [&dataloader, &file](std::string_view val) -> bool {"
-    callback_start = se.find(callback_start_marker)
-    if callback_start == -1:
-        raise SystemExit("Could not structurally locate SoundEffect file callback.")
-    if se.find(callback_start_marker, callback_start + 1) != -1:
-        raise SystemExit("Multiple SoundEffect file callbacks found; refusing blind patch.")
-    callback_start = se.rfind("\t", 0, callback_start + 1)
-    if callback_start == -1:
-        callback_start = se.find(callback_start_marker)
-    callback_end = se.find("\n\t};", callback_start)
-    if callback_end == -1:
-        raise SystemExit("Could not locate end of SoundEffect file callback.")
-    callback_end += len("\n\t};")
-    se = se[:callback_start] + sound_define_new + se[callback_end:]
+	};
 
+	fixed_point_t volume = 1;
+	bool ret = true;
+
+#if defined(__EMSCRIPTEN__)
+	// Avoid NodeTools::expect_dictionary_keys() here on Web. Its generic
+	// expect_list_and_length() pre-counts the Dryad range before callbacks,
+	// which can stall the pthread/MEMFS startup path before the first sound
+	// definition is processed.
+	bool file_found = false;
+	bool volume_found = false;
+	auto process_fields = [&](auto const& statements) -> bool {
+		bool fields_ret = true;
+		for (ast::Statement const* statement : statements) {
+			auto const* assign_node = dryad::node_try_cast<ast::AssignStatement>(statement);
+			if (assign_node == nullptr) {
+				spdlog::error_s("Invalid non-assignment node in sound definition {}", sfx_identifier);
+				fields_ret = false;
+				continue;
+			}
+
+			std::string_view key;
+			if (!expect_identifier(assign_variable_callback(key))(assign_node->left())) {
+				fields_ret = false;
+				continue;
+			}
+
+			if (key == "file") {
+				if (file_found) {
+					spdlog::error_s("Invalid repeat of sound dictionary key: file");
+					fields_ret = false;
+					continue;
+				}
+				file_found = true;
+				fields_ret &= expect_string(file_callback)(assign_node->right());
+			} else if (key == "volume") {
+				if (volume_found) {
+					spdlog::error_s("Invalid repeat of sound dictionary key: volume");
+					fields_ret = false;
+					continue;
+				}
+				volume_found = true;
+				fields_ret &= expect_fixed_point(assign_variable_callback(volume))(assign_node->right());
+			} else {
+				spdlog::error_s("Invalid sound dictionary key: {}", key);
+				fields_ret = false;
+			}
+		}
+		return fields_ret;
+	};
+
+	if (root == nullptr) {
+		spdlog::error_s("Null sound definition node for {}", sfx_identifier);
+		ret = false;
+	} else if (auto const* list_value = dryad::node_try_cast<ast::ListValue>(root)) {
+		ret &= process_fields(list_value->statements());
+	} else if (auto const* file_tree = dryad::node_try_cast<ast::FileTree>(root)) {
+		ret &= process_fields(file_tree->statements());
+	} else {
+		spdlog::error_s("Invalid sound definition node type for {}", sfx_identifier);
+		ret = false;
+	}
+	if (!file_found) {
+		spdlog::error_s("Missing required sound dictionary key: file ({})", sfx_identifier);
+		ret = false;
+	}
+#else
+	ret &= expect_dictionary_keys(
+		"file", ONE_EXACTLY, expect_string(file_callback), //
+		"volume", ZERO_OR_ONE, expect_fixed_point(assign_variable_callback(volume)) //
+	)(root);
+#endif
+
+	if (sfx_identifier.empty()) {
+		spdlog::error_s("Invalid sound identifier - empty!");
+		return false;
+	}
+	if (file.empty()) {
+		spdlog::warn_s("Sound filename {} was empty!", sfx_identifier);
+	}
+
+	ret &= sound_effects.emplace_item(
+		sfx_identifier,
+		sfx_identifier, std::move(file), volume
+	);
+	return ret;
+}
+
+'''
+
+sound_file_new = r'''bool SoundEffectManager::load_sound_defines_file(Dataloader const& dataloader, ast::NodeCPtr root) {
+#if defined(__EMSCRIPTEN__)
+	// Walk sound.sfx directly on Web instead of expect_dictionary_reserve_length().
+	// This removes both the up-front ranges::distance() pass and registry reserve
+	// from the browser's critical startup path.
+	if (root == nullptr) {
+		std::puts("[WebLoadRaw] sound.sfx: null AST root");
+		std::fflush(stdout);
+		return false;
+	}
+
+	auto process_entries = [this, &dataloader](auto const& statements) -> bool {
+		bool ret = true;
+		size_t index = 0;
+		for (ast::Statement const* statement : statements) {
+			std::printf("[WebLoadRaw] sound.sfx: entry %zu begin\n", index);
+			std::fflush(stdout);
+
+			auto const* assign_node = dryad::node_try_cast<ast::AssignStatement>(statement);
+			if (assign_node == nullptr) {
+				std::printf("[WebLoadRaw] sound.sfx: entry %zu is not assignment\n", index);
+				std::fflush(stdout);
+				ret = false;
+				++index;
+				continue;
+			}
+
+			std::string_view key;
+			if (!expect_identifier(assign_variable_callback(key))(assign_node->left())) {
+				std::printf("[WebLoadRaw] sound.sfx: entry %zu key parse failed\n", index);
+				std::fflush(stdout);
+				ret = false;
+				++index;
+				continue;
+			}
+
+			std::printf(
+				"[WebLoadRaw] sound.sfx: entry %zu key=%.*s\n",
+				index, static_cast<int>(key.size()), key.data()
+			);
+			std::fflush(stdout);
+			ret &= _load_sound_define(dataloader, key, assign_node->right());
+			std::printf("[WebLoadRaw] sound.sfx: entry %zu done\n", index);
+			std::fflush(stdout);
+			++index;
+		}
+		std::printf("[WebLoadRaw] sound.sfx: direct walk done; entries=%zu\n", index);
+		std::fflush(stdout);
+		return ret;
+	};
+
+	if (auto const* file_tree = dryad::node_try_cast<ast::FileTree>(root)) {
+		return process_entries(file_tree->statements());
+	}
+	if (auto const* list_value = dryad::node_try_cast<ast::ListValue>(root)) {
+		return process_entries(list_value->statements());
+	}
+
+	std::puts("[WebLoadRaw] sound.sfx: unsupported AST root type");
+	std::fflush(stdout);
+	return false;
+#else
+	return expect_dictionary_reserve_length(sound_effects, //
+		[this, &dataloader](std::string_view key, ast::NodeCPtr value) -> bool {
+			return _load_sound_define(dataloader, key, value);
+		}
+	)(root);
+#endif
+}
+'''
+
+se = se[:sound_define_start] + sound_define_new + sound_file_new
 sound_effect_cpp.write_text(se, encoding="utf-8")
-print("OpenVic Web sound-definition lookup diagnostics patched.")
+print("OpenVic Web sound.sfx direct AST walker patched.")
 
 ecs_cpp = sim / "src/openvic-simulation/core/ecs/EcsThreadPool.cpp"
 ecs_text = ecs_cpp.read_text(encoding="utf-8")

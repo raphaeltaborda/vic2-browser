@@ -155,3 +155,13 @@ test('sound definition walker is traced around each Web file lookup', () => {
   assert.match(portPatch, /sound define %\.\*s -> %s/);
   assert.match(portPatch, /sound define resolved: %s/);
 });
+
+
+test('Web sound.sfx bypasses generic pre-count and reserve traversal', () => {
+  const portPatch = fs.readFileSync('scripts/patch_openvic_web.py', 'utf8');
+  assert.match(portPatch, /sound\.sfx: entry %zu begin/);
+  assert.match(portPatch, /sound\.sfx: direct walk done; entries=%zu/);
+  assert.match(portPatch, /dryad::node_try_cast<ast::AssignStatement>/);
+  assert.match(portPatch, /#else\n\treturn expect_dictionary_reserve_length/);
+  assert.match(portPatch, /#else\n\tret &= expect_dictionary_keys/);
+});
