@@ -18,7 +18,7 @@ project_line = "project(openvic LANGUAGES CXX)\n"
 shared_block = """project(openvic LANGUAGES CXX)
 
 # VIC2-WEB: enable real Emscripten SIDE_MODULE shared libraries
-if(EMSCRIPTEN)
+if(CMAKE_SYSTEM_NAME STREQUAL "Emscripten")
     set_property(GLOBAL PROPERTY TARGET_SUPPORTS_SHARED_LIBS TRUE)
     set(CMAKE_SHARED_LIBRARY_CREATE_C_FLAGS "-sSIDE_MODULE=1")
     set(CMAKE_SHARED_LIBRARY_CREATE_CXX_FLAGS "-sSIDE_MODULE=1")
