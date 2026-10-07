@@ -1,39 +1,43 @@
 name: Test launcher
+
 on:
   pull_request:
     paths:
       - 'web/**'
-      - 'scripts/**'
       - 'tests/**'
       - '.github/workflows/test-launcher.yml'
   push:
-    branches: [main]
+    branches:
+      - web-port-v2
     paths:
       - 'web/**'
-      - 'scripts/**'
       - 'tests/**'
       - '.github/workflows/test-launcher.yml'
+
 permissions:
   contents: read
+
 jobs:
   launcher:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - name: Check launcher behavior and patch syntax
-        run: |
-          node --test tests/launcher.test.cjs
-          python3 -m py_compile scripts/*.py
+
+      - name: Test launcher behavior
+        run: node --test tests/launcher.test.cjs
+
       - name: Check browser layout with a stub engine
         run: |
           npm install --no-save --package-lock=false playwright@1.58.2
           export CHROME="$(command -v google-chrome || command -v chromium)"
           test -n "$CHROME"
           node tests/launcher.browser.cjs
+
       - name: Upload launcher previews
         if: always()
         uses: actions/upload-artifact@v4
