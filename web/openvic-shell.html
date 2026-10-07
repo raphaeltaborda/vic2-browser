@@ -6,98 +6,101 @@
   <title>Victoria II Browser</title>
   $GODOT_HEAD_INCLUDE
   <style>
-    :root { color-scheme: dark; font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
-    * { box-sizing: border-box; }
-    html, body { margin:0; width:100%; min-height:100%; background:#0d1014; color:#eef1f4; }
-    body { overflow:auto; }
+    :root { color-scheme:dark; --bg:#101b1e; --panel:#17262a; --line:#334346; --gold:#d4b478; --text:#efece2; --muted:#a4b2b2; font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif; }
+    * { box-sizing:border-box; }
+    body { margin:0; background:var(--bg); color:var(--text); }
+    button,input { font:inherit; }
+    button { cursor:pointer; }
+    button:disabled { opacity:.45; cursor:not-allowed; }
+    button:focus-visible,summary:focus-visible,a:focus-visible,input:focus-visible { outline:2px solid var(--gold); outline-offset:5px; }
     #canvas { display:none; width:100vw; height:100vh; background:#000; outline:none; }
-    #runtime-status { display:none; position:fixed; z-index:20; left:16px; bottom:16px; max-width:min(680px,calc(100vw - 32px)); padding:10px 13px; border:1px solid #3a4652; border-radius:8px; background:rgba(8,12,16,.88); color:#d8dee4; font:12px/1.45 ui-monospace,SFMono-Regular,Consolas,monospace; pointer-events:none; }
-    #runtime-status.error { border-color:#8f474f; color:#ffb7bd; }
-    #launcher { min-height:100vh; display:grid; place-items:center; padding:28px; background:
-      radial-gradient(circle at 30% 10%, rgba(102,121,143,.16), transparent 34%),
-      linear-gradient(180deg,#11151a,#0a0d10); }
-    .card { width:min(780px,100%); padding:34px; border:1px solid #2c333b; border-radius:16px; background:rgba(19,23,28,.94); box-shadow:0 24px 80px rgba(0,0,0,.34); }
-    .eyebrow { color:#9ba7b3; font-size:12px; font-weight:800; letter-spacing:.13em; }
-    h1 { margin:10px 0 10px; font-size:clamp(34px,7vw,58px); letter-spacing:-.045em; }
-    h2 { margin:0 0 12px; font-size:18px; }
-    p { color:#b8c0c8; line-height:1.6; }
-    .notice { padding:14px 16px; border:1px solid #34404b; border-radius:10px; background:#10151a; }
-    .engine-box { margin:20px 0; padding:16px; border:1px solid #34404b; border-radius:10px; background:#0d1217; }
-    .status-row { display:flex; justify-content:space-between; gap:20px; padding:8px 0; border-bottom:1px solid #252d35; }
-    .status-row:last-child { border-bottom:0; }
-    .ok { color:#8ed29d; } .bad { color:#ef9a9a; } .pending { color:#e9c46a; } .muted { color:#89949f; }
-    .actions { display:flex; flex-wrap:wrap; gap:12px; margin-top:18px; }
-    button, .pick { appearance:none; border:0; border-radius:9px; padding:13px 17px; font:inherit; font-weight:750; cursor:pointer; }
-    button.primary, .pick { background:#eef1f4; color:#101318; }
-    button.secondary { background:#222930; color:#eef1f4; border:1px solid #39434d; }
-    button:disabled, .pick.disabled { opacity:.45; cursor:not-allowed; pointer-events:none; }
-    input[type=file] { display:none; }
-    .checks { display:grid; gap:8px; margin-top:18px; }
-    .check { display:flex; justify-content:space-between; gap:16px; padding:10px 12px; border:1px solid #2b333c; border-radius:8px; background:#0e1216; }
-    .confirm { display:flex; align-items:flex-start; gap:10px; margin-top:18px; color:#cbd1d7; line-height:1.45; }
-    .confirm input { margin-top:4px; }
+    #launcher { min-height:100vh; padding:30px clamp(20px,5vw,80px); background:radial-gradient(ellipse at 15% 45%,#23404670,transparent 55%); }
+    .masthead,.footer { max-width:1280px; margin:auto; display:flex; align-items:center; justify-content:space-between; gap:20px; }
+    .masthead { padding-bottom:24px; border-bottom:1px solid var(--line); }
+    .brand { display:flex; align-items:center; gap:12px; font:600 18px Georgia,serif; letter-spacing:.04em; }
+    .seal { display:grid; place-items:center; width:36px; height:36px; border:1px solid var(--gold); color:var(--gold); font:20px Georgia,serif; }
+    .badge,.eyebrow,.step,.atlas-label { font-size:10px; font-weight:700; letter-spacing:.18em; text-transform:uppercase; }
+    .badge { border:1px solid var(--line); padding:8px 12px; border-radius:20px; color:var(--muted); }
+    .layout { display:grid; grid-template-columns:1fr 1fr; gap:clamp(32px,6vw,96px); max-width:1180px; margin:58px auto 44px; align-items:center; }
+    .eyebrow,.step { color:var(--gold); }
+    h1 { font:normal clamp(60px,6.5vw,94px)/.94 Georgia,"Times New Roman",serif; letter-spacing:-.05em; margin:22px 0; }
+    h1 span { display:block; color:var(--gold); font-style:italic; }
+    .intro { max-width:400px; color:var(--muted); font-size:16px; line-height:1.8; }
+    .atlas { position:relative; height:220px; max-width:460px; margin:25px 0; overflow:hidden; border-top:1px solid var(--line); border-bottom:1px solid var(--line); }
+    .atlas svg { width:100%; height:100%; color:#8caa9b; opacity:.5; }
+    .atlas-label { position:absolute; bottom:12px; left:0; color:var(--muted); background:var(--bg); padding:4px 10px 4px 0; }
+    .hero-note { display:flex; gap:24px; color:var(--muted); font-size:12px; }
+    .hero-note strong { color:var(--text); display:block; margin-bottom:5px; font-weight:500; }
+    .card { padding:28px; background:linear-gradient(145deg,#1b2c30,#142125); border:1px solid #405052; border-radius:14px; box-shadow:0 24px 65px #0003; }
+    h2 { margin:9px 0 8px; font:normal 28px Georgia,serif; }
+    p { color:var(--muted); line-height:1.65; font-size:13px; }
+    .engine-box { margin:22px 0; padding:14px 16px; border:1px solid var(--line); border-radius:8px; background:#101b1e80; }
+    .status-row { display:flex; justify-content:space-between; gap:12px; padding:5px 0; font-size:12px; }
+    .status-row strong { font-weight:500; }
+    .ok { color:#a4d6b4; } .bad { color:#ffafb0; } .pending { color:var(--gold); } .muted { color:var(--muted); }
+    .actions { display:grid; gap:10px; margin-top:20px; }
+    button { border:1px solid var(--line); border-radius:7px; padding:13px 16px; font-weight:600; }
+    .primary { background:var(--gold); color:#192325; border-color:var(--gold); }
+    .secondary { background:#203337; color:var(--text); }
+    button:not(:disabled):hover { filter:brightness(1.12); }
+    .checks { display:grid; gap:0; margin-top:16px; }
+    .check { display:flex; justify-content:space-between; gap:16px; padding:7px 0; font-size:12px; border-bottom:1px solid #ffffff08; }
+    .confirm { display:flex; align-items:flex-start; gap:10px; margin:18px 0; color:var(--muted); font-size:12px; line-height:1.6; }
+    .confirm input { margin-top:4px; accent-color:var(--gold); }
     #progress-wrap { display:none; margin-top:20px; }
-    progress { width:100%; height:12px; }
-    #status { margin:10px 0 0; font-size:14px; color:#c5ccd3; }
-    #log { margin-top:12px; max-height:190px; overflow:auto; white-space:pre-wrap; font:11px/1.45 ui-monospace,SFMono-Regular,Consolas,monospace; color:#909aa4; }
-    #error { display:none; margin-top:16px; padding:14px; border:1px solid #7c3f45; background:#2a171a; color:#ffb7bd; border-radius:9px; white-space:pre-wrap; }
-    .privacy { margin-top:22px; font-size:12px; color:#7e8994; }
+    progress { width:100%; height:8px; accent-color:var(--gold); }
+    #status { margin:10px 0; color:var(--text); font-size:13px; }
+    #error { display:none; padding:14px; border:1px solid #805057; background:#351f25; color:#ffb7bd; border-radius:7px; white-space:pre-wrap; overflow-wrap:anywhere; font-size:12px; }
+    .privacy { font-size:11px; color:var(--muted); margin:16px 0 0; }
+    .footer { border-top:1px solid var(--line); padding-top:20px; color:var(--muted); font-size:11px; }
+    a { color:inherit; text-underline-offset:4px; }
+    #diagnostics { max-width:1180px; margin:0 auto 24px; padding:14px 16px; border:1px solid var(--line); background:#101b1e; border-radius:8px; font-size:12px; }
+    summary { cursor:pointer; color:var(--muted); }
+    .diagnostic-actions { display:flex; gap:10px; align-items:center; margin-top:14px; }
+    .diagnostic-actions button { padding:8px 12px; font-size:11px; }
+    #log { max-height:180px; overflow:auto; white-space:pre-wrap; overflow-wrap:anywhere; color:#afc0be; font:11px/1.6 ui-monospace,monospace; }
+    #runtime-status { display:none; position:fixed; z-index:20; left:16px; bottom:64px; max-width:calc(100vw - 32px); padding:10px 14px; border:1px solid var(--line); border-radius:8px; background:#101b1eee; color:var(--text); font:12px/1.5 ui-monospace,monospace; pointer-events:none; }
+    #runtime-status.error { border-color:#a65f69; color:#ffb7bd; }
+    body.running #diagnostics { position:fixed; z-index:25; bottom:12px; left:16px; right:16px; margin:0; max-width:700px; box-shadow:0 4px 24px #0006; }
+    @media(max-width:800px) { .layout { grid-template-columns:1fr; gap:28px; margin:35px auto; } .atlas { display:none; } h1 { font-size:64px; } .hero-note { margin-top:22px; } .card { padding:22px; } .badge { font-size:8px; } .footer { align-items:flex-start; } }
+    @media(prefers-reduced-motion:no-preference) { button { transition:filter .15s; } }
   </style>
 </head>
 <body>
-  <canvas id="canvas" tabindex="0">Seu navegador não suporta canvas.</canvas>
-  <div id="runtime-status">OpenVic Web iniciando…</div>
-
+  <canvas id="canvas" tabindex="0" aria-label="Victoria II">Seu navegador não suporta canvas.</canvas>
+  <div id="runtime-status" role="status"></div>
   <main id="launcher">
-    <section class="card">
-      <div class="eyebrow">VIC2-BROWSER · PORT NATIVO WEBASSEMBLY</div>
-      <h1>Victoria II no navegador</h1>
-      <p>Esta página carrega Godot Web e a GDExtension nativa do OpenVic em WebAssembly. Nenhum executável Windows é executado ou emulado.</p>
-
-      <div class="engine-box">
-        <h2>Teste da engine</h2>
-        <div class="status-row"><span>Godot Web</span><strong id="godot-state" class="pending">inicializando…</strong></div>
-        <div class="status-row"><span>OpenVic WASM</span><strong id="openvic-state" class="pending">aguardando…</strong></div>
-        <div class="status-row"><span>Victoria II</span><strong class="muted">não necessário para este teste</strong></div>
-      </div>
-
-      <div class="notice">
-        <strong>Teste sem arquivos proprietários.</strong>
-        <p style="margin:6px 0 0">Se os dois primeiros indicadores ficarem verdes, o navegador carregou o runtime WebAssembly do Godot e a biblioteca do OpenVic. A cópia legítima do Victoria II só será usada para carregar os dados do jogo.</p>
-      </div>
-
-      <section style="margin-top:24px">
-        <h2>Próxima etapa: dados do Victoria II</h2>
-        <p>Depois que a engine estiver pronta, você já pode selecionar a pasta de uma instalação legítima para validar a estrutura. Os arquivos permanecem no navegador.</p>
-
-        <div class="actions">
-          <label id="pick-label" class="pick disabled">
-            Selecionar pasta do Victoria II
-            <input id="game-files" type="file" webkitdirectory multiple disabled>
-          </label>
-          <button id="launch" class="primary" disabled>Iniciar com os dados selecionados</button>
+    <header class="masthead"><div class="brand"><span class="seal" aria-hidden="true">V</span> VICTORIA II <span class="muted">/ WEB</span></div><span class="badge">Projeto experimental</span></header>
+    <div class="layout">
+      <section class="hero">
+        <div class="eyebrow">1836 — 1936 · Uma era de transformações</div>
+        <h1>O mundo.<span>Suas decisões.</span></h1>
+        <p class="intro">Indústria, diplomacia e impérios. O projeto de levar Victoria II ao navegador começa com a sua própria cópia do jogo.</p>
+        <div class="atlas" aria-hidden="true">
+          <svg viewBox="0 0 460 240" fill="none"><g stroke="currentColor" stroke-width=".8"><ellipse cx="230" cy="120" rx="196" ry="104"/><ellipse cx="230" cy="120" rx="126" ry="104"/><ellipse cx="230" cy="120" rx="48" ry="104"/><path d="M34 120h392M47 84h366M47 156h366M86 48h288M86 192h288M230 16v208"/><path fill="currentColor" fill-opacity=".16" d="m86 71 36-26 32 8 18 25-16 29-28 6-9 21-17-26-26-16Zm66 64 29 10 11 27-24 40-13-24-10-28Zm78-71 25-17 20 9 14-11 53 17 42 24-18 23-35-5-11 22-29-11-15-26-19 7-8-17Zm21 35 37 15 10 30-23 40-16-19-18-44Zm95 64 29-12 22 20-9 15-36-3Z"/></g></svg>
+          <span class="atlas-label">Um século para escrever sua história</span>
         </div>
-
-        <div id="checks" class="checks">
-          <div class="check"><span>Instalação</span><span class="muted">não selecionada</span></div>
-        </div>
-
-        <label class="confirm">
-          <input id="ownership" type="checkbox">
-          <span>Confirmo que os arquivos selecionados pertencem a uma cópia legítima de Victoria II que tenho direito de usar.</span>
-        </label>
+        <div class="hero-note"><div><strong>Arquivos locais</strong>Sem envio da sua instalação</div><div><strong>OpenVic + Godot</strong>Em desenvolvimento</div></div>
       </section>
-
-      <div id="progress-wrap">
-        <progress id="mount-progress" value="0" max="100"></progress>
-        <div id="status">Preparando…</div>
-      </div>
-      <div id="error"></div>
-      <pre id="log"></pre>
-
-      <div class="privacy">Nenhum arquivo de Victoria II é incluído no repositório, no build ou no site publicado.</div>
-    </section>
+      <section class="card" aria-labelledby="setup-title">
+        <div class="step">Preparar sessão</div><h2 id="setup-title">Seu próximo capítulo</h2>
+        <p>Selecione a pasta onde Victoria II está instalado. Vamos conferir os arquivos antes de começar.</p>
+        <div class="engine-box" aria-live="polite">
+          <div class="status-row"><span>Godot Web</span><strong id="godot-state" class="pending">inicializando…</strong></div>
+          <div class="status-row"><span>OpenVic WASM</span><strong id="openvic-state" class="pending">aguardando…</strong></div>
+        </div>
+        <div class="actions"><button id="pick-label" class="secondary" disabled>Selecionar pasta do jogo</button><input id="game-files" type="file" webkitdirectory multiple hidden disabled aria-label="Pasta da instalação de Victoria II"></div>
+        <div id="checks" class="checks" aria-live="polite"><div class="check"><span>Instalação</span><span class="muted">não selecionada</span></div></div>
+        <label class="confirm"><input id="ownership" type="checkbox"><span>Confirmo que os arquivos selecionados pertencem a uma cópia legítima de Victoria II que tenho direito de usar.</span></label>
+        <div class="actions"><button id="launch" class="primary" disabled>Iniciar Victoria II →</button></div>
+        <div id="progress-wrap"><progress id="mount-progress" value="0" max="100" aria-label="Montagem dos arquivos locais"></progress><div id="status" role="status">Preparando…</div></div>
+        <div id="error" role="alert"></div>
+        <p class="privacy">Os dados do jogo ficam nesta sessão do navegador. O carregamento completo ainda está em validação.</p>
+      </section>
+    </div>
+    <footer class="footer"><span>Victoria II Web · Projeto independente, sem vínculo com a Paradox.</span><a href="https://github.com/raphaeltaborda/vic2-browser" target="_blank" rel="noopener noreferrer">Acompanhar o projeto ↗</a></footer>
   </main>
+  <details id="diagnostics"><summary>Diagnóstico da sessão</summary><div class="diagnostic-actions"><button id="copy-log" class="secondary">Copiar diagnóstico</button><button id="reload" class="secondary">Reiniciar página</button><span id="copy-status" role="status"></span></div><pre id="log"></pre></details>
 
   <script src="$GODOT_URL"></script>
   <script>
@@ -126,9 +129,64 @@
     let starting = false;
     let engine = null;
 
+    const logLines = [];
+    let logFrame = 0;
+    let lastPhase = '';
+    let lastPhaseAt = 0;
+    let loadWatch = 0;
+    let terminalError = false;
+
     function log(message) {
-      logEl.textContent += message + '\n';
-      logEl.scrollTop = logEl.scrollHeight;
+      logLines.push(new Date().toISOString().slice(11, 19) + ' ' + String(message).slice(0, 2000));
+      if (logLines.length > 500) logLines.splice(0, logLines.length - 500);
+      if (!logFrame) logFrame = requestAnimationFrame(() => {
+        logEl.textContent = logLines.join('\n');
+        logEl.scrollTop = logEl.scrollHeight;
+        logFrame = 0;
+      });
+    }
+
+    function trackRuntime(line) {
+      const marker = line.match(/\[WebLoad(?:Raw)?\]\s*(.*)/);
+      if (marker) {
+        lastPhase = marker[1];
+        lastPhaseAt = performance.now();
+        if (!terminalError) runtimeStatus.textContent = 'OpenVic · ' + lastPhase;
+        runtimeStatus.style.display = 'block';
+      }
+      if (line.includes('Loading took ')) {
+        clearInterval(loadWatch);
+        if (!terminalError) {
+          runtimeStatus.textContent = 'Leitura concluída · abrindo menu…';
+          setTimeout(() => { if (!terminalError) runtimeStatus.style.display = 'none'; }, 3000);
+        }
+      }
+    }
+
+    function runtimeError(message) {
+      terminalError = true;
+      clearInterval(loadWatch);
+      log('[erro] ' + message);
+      runtimeStatus.classList.add('error');
+      runtimeStatus.textContent = String(message).slice(0, 300) + ' · Abra o diagnóstico abaixo.';
+      runtimeStatus.style.display = 'block';
+    }
+
+    async function withTimeout(promise, ms, message) {
+      let timer;
+      try {
+        return await Promise.race([promise, new Promise((_, reject) => {
+          timer = setTimeout(() => reject(new Error(message)), ms);
+        })]);
+      } finally { clearTimeout(timer); }
+    }
+
+    // Vanilla data only: do not duplicate mods, saves, installers or map caches in MEMFS.
+    function shouldMount(path) {
+      const lower = path.toLowerCase();
+      return !/\.(exe|dll|msi|zip|rar|7z|log|dmp)$/.test(lower) &&
+        !/^(mod|mods|save games|screenshots|logs|crashdumps|_commonredist|directx|dx|install)\//.test(lower) &&
+        !/^map\/cache\//.test(lower);
     }
 
     function setState(element, state, text) {
@@ -148,7 +206,7 @@
       const regs = await navigator.serviceWorker.getRegistrations();
       for (const reg of regs) {
         const url = reg.active?.scriptURL || reg.waiting?.scriptURL || reg.installing?.scriptURL || '';
-        if (url.includes('coi-serviceworker.js')) await reg.unregister();
+        if (url.includes('coi-serviceworker.js') && reg.scope === new URL('./', location.href).href) await reg.unregister();
       }
     }
 
@@ -170,7 +228,7 @@
       log('Registrando Service Worker oficial do Godot para COOP/COEP: ' + serviceWorker);
 
       await navigator.serviceWorker.register(serviceWorker);
-      await navigator.serviceWorker.ready;
+      await withTimeout(navigator.serviceWorker.ready, 30000, 'O Service Worker não ficou pronto. Recarregue a página.');
 
       const attempts = Number(sessionStorage.getItem('vic2-thread-bootstrap') || '0');
       if (attempts < 2) {
@@ -202,21 +260,10 @@
 
         log('Godot executable: ' + GODOT_CONFIG.executable);
         log('OpenVic side module: ' + openvicLib);
-        setState(openvicState, 'pending', 'validando WASM…');
 
-        const openvicResponse = await fetch(openvicLib, { cache: 'reload' });
-        if (!openvicResponse.ok) {
-          throw new Error('Falha ao baixar OpenVic WASM: HTTP ' + openvicResponse.status);
-        }
-        const openvicBytes = await openvicResponse.arrayBuffer();
-        if (!WebAssembly.validate(openvicBytes)) {
-          throw new Error(
-            'O arquivo publicado do OpenVic não é um módulo WebAssembly válido. ' +
-            'O deploy foi bloqueado e precisa ser recompilado como Emscripten SIDE_MODULE.'
-          );
-        }
-        log('OpenVic WASM validado pelo navegador: ' + openvicBytes.byteLength + ' bytes.');
-        setState(openvicState, 'pending', 'WASM válido · vinculando…');
+        // The build validates the WASM artifact. engine.init downloads and compiles it;
+        // fetching and validating it here too doubled download/validation work.
+        setState(openvicState, 'pending', 'carregando…');
 
         engine = new Engine(Object.assign({}, GODOT_CONFIG, {
           canvas,
@@ -225,37 +272,25 @@
             const line = args.join(' ');
             console.log(...args);
             log(line);
-            if (line.includes('[WebLoad]')) {
-              const phase = line.replace(/.*\[WebLoad\]\s*/, '').trim();
-              runtimeStatus.textContent = 'OpenVic · ' + phase;
-              runtimeStatus.style.display = 'block';
-            } else if (line.includes('Loading took ')) {
-              runtimeStatus.textContent = 'OpenVic carregado · abrindo menu…';
-              setTimeout(() => { runtimeStatus.style.display = 'none'; }, 1800);
-            }
+            trackRuntime(line);
           },
           onPrintError: (...args) => {
             const line = args.join(' ');
             console.error(...args);
             log('[Godot] ' + line);
-            runtimeStatus.classList.add('error');
-            runtimeStatus.textContent = 'OpenVic erro: ' + line.slice(0, 240);
-            runtimeStatus.style.display = 'block';
+            runtimeError('OpenVic: ' + line);
           },
         }));
 
-        const initTimeout = new Promise((_, reject) => {
-          setTimeout(() => reject(new Error(
-            'Timeout ao inicializar Godot + OpenVic. O módulo WASM é válido, mas a linkagem dinâmica não concluiu.'
-          )), 90000);
-        });
-        await Promise.race([engine.init(GODOT_CONFIG.executable), initTimeout]);
+        await withTimeout(engine.init(GODOT_CONFIG.executable), 90000,
+          'A inicialização da engine não concluiu em 90 segundos. Reinicie a página para tentar novamente.');
 
         setState(godotState, 'ok', 'carregado');
         setState(openvicState, 'ok', 'carregado');
         engineReady = true;
         filesInput.disabled = false;
-        pickLabel.classList.remove('disabled');
+        pickLabel.disabled = false;
+        launchButton.disabled = !(validated && ownership.checked);
         log('Smoke test concluído: Godot Web + OpenVic WASM inicializados.');
       } catch (err) {
         setState(godotState, 'bad', 'falha');
@@ -295,12 +330,14 @@
         ['v2game.exe', 'Cópia do Victoria II'],
         ['common/defines.lua', 'Defines'],
         ['map/definition.csv', 'Definição de províncias'],
-        ['map/provinces.bmp', 'Mapa de províncias']
+        ['map/provinces.bmp', 'Mapa de províncias'],
+        ['interface/sound.sfx', 'Definições de som'],
+        ['interface/core.gui', 'Interface principal']
       ];
 
       let ok = selected.length > 0;
       for (const [path, label] of required) {
-        const present = map.has(path);
+        const present = map.has(path) && map.get(path).size > 0;
         row(label, present, present ? 'OK' : 'ausente');
         ok = ok && present;
       }
@@ -311,40 +348,34 @@
       row('History', hasHistory, hasHistory ? 'OK' : 'ausente');
       ok = ok && hasLocalisation && hasHistory;
 
-      const bytes = selected.reduce((n, f) => n + f.size, 0);
+      const mounted = selected.filter(f => shouldMount(relativePath(f)));
+      const bytes = mounted.reduce((n, f) => n + f.size, 0);
       row('Arquivos locais', selected.length > 0, selected.length.toLocaleString('pt-BR'));
       row('Dados a montar', selected.length > 0, (bytes / 1024 / 1024).toFixed(0) + ' MB');
 
       validated = ok;
-      launchButton.disabled = !(engineReady && validated && ownership.checked);
+      launchButton.disabled = starting || !(engineReady && validated && ownership.checked);
     }
 
+    pickLabel.addEventListener('click', () => filesInput.click());
+
     filesInput.addEventListener('change', () => {
+      if (starting) return;
       selected = Array.from(filesInput.files || []);
       validateSelection();
     });
 
     ownership.addEventListener('change', () => {
-      launchButton.disabled = !(engineReady && validated && ownership.checked);
+      launchButton.disabled = starting || !(engineReady && validated && ownership.checked);
     });
 
     async function copyProjectPack() {
       const pack = GODOT_CONFIG.mainPack || (GODOT_CONFIG.executable + '.pck');
       status.textContent = 'Carregando projeto OpenVic…';
 
-      // Godot's PWA Service Worker is required for cross-origin isolation on
-      // GitHub Pages, but an older worker/cache can otherwise keep serving a
-      // previous PCK after a deploy. Purge this origin's PWA caches and request
-      // the PCK through a unique URL, then install it in MEMFS under its normal
-      // name for --main-pack.
-      if ('caches' in globalThis) {
-        const keys = await caches.keys();
-        await Promise.all(keys.map(key => caches.delete(key)));
-        if (keys.length) log('Caches PWA removidos antes do PCK: ' + keys.length);
-      }
-
+      // Revalidate this project's PCK without deleting caches owned by other pages.
       const packURL = new URL(pack, location.href);
-      packURL.searchParams.set('vic2_build', String(Date.now()));
+      packURL.searchParams.set('vic2_build', 'launcher-v2');
       const response = await fetch(packURL, { cache: 'no-store' });
       if (!response.ok) throw new Error('Falha ao carregar o projeto Web: HTTP ' + response.status);
       const bytes = await response.arrayBuffer();
@@ -354,31 +385,26 @@
     }
 
     async function mountVictoria() {
-      const total = selected.reduce((n, f) => n + f.size, 0);
+      const files = selected.filter(f => shouldMount(relativePath(f)));
+      const total = files.reduce((n, f) => n + f.size, 0);
       let done = 0;
       let count = 0;
-
-      status.textContent = 'Montando sua cópia local em /vic2…';
-      for (const file of selected) {
+      let lastYield = performance.now();
+      status.textContent = 'Preparando arquivos locais…';
+      for (const file of files) {
         const rel = relativePath(file);
-        if (!rel) continue;
-
-        // The Windows binaries prove the selected folder is an installation,
-        // but a native Web port never executes or needs them.
-        const lower = rel.toLowerCase();
-        if (lower.endsWith('.exe') || lower.endsWith('.dll')) {
-          done += file.size;
-          continue;
+        if (!rel || rel.split('/').some(part => part === '..' || part === '.')) {
+          throw new Error('Caminho inválido na instalação selecionada.');
         }
-
         engine.copyToFS('/vic2/' + rel, await file.arrayBuffer());
         done += file.size;
         count++;
-
-        if ((count & 31) === 0 || done === total) {
-          mountProgress.value = total ? Math.round(done * 100 / total) : 0;
-          status.textContent = 'Montando arquivos locais… ' + mountProgress.value + '%';
+        if (performance.now() - lastYield > 50 || count === files.length) {
+          mountProgress.value = total ? Math.round(done * 100 / total) : 100;
+          status.textContent = 'Preparando arquivos locais · ' + mountProgress.value + '% · ' +
+            Math.round(done / 1048576) + ' / ' + Math.round(total / 1048576) + ' MB';
           await new Promise(requestAnimationFrame);
+          lastYield = performance.now();
         }
       }
       log('Instalação montada: ' + count + ' arquivos em /vic2.');
@@ -388,13 +414,15 @@
       if (starting || !engineReady || !validated || !ownership.checked) return;
       starting = true;
       launchButton.disabled = true;
+      filesInput.disabled = true;
+      pickLabel.disabled = true;
+      ownership.disabled = true;
       progressWrap.style.display = 'block';
       errorEl.style.display = 'none';
       mountProgress.value = 0;
 
       try {
         const pack = await copyProjectPack();
-        mountProgress.value = 4;
         await mountVictoria();
 
         mountProgress.value = 100;
@@ -404,6 +432,7 @@
         // Reveal the canvas before callMain(). The threaded Web build keeps
         // Victoria II parsing off the browser UI thread so loading remains responsive.
         launcher.style.display = 'none';
+        document.body.classList.add('running');
         canvas.style.display = 'block';
         runtimeStatus.classList.remove('error');
         runtimeStatus.textContent = 'OpenVic iniciou · carregando Victoria II em thread dedicada…';
@@ -412,41 +441,52 @@
         await new Promise(requestAnimationFrame);
         await new Promise(requestAnimationFrame);
 
-        const startTimeout = new Promise((_, reject) => {
-          setTimeout(() => reject(new Error(
-            'Timeout ao iniciar o projeto Godot depois da montagem dos dados. Consulte o log do navegador.'
-          )), 120000);
-        });
-
-        await Promise.race([
-          engine.start({
-            canvas,
-            args: ['--main-pack', pack, '--', '--base-path=/vic2'],
-          }),
-          startTimeout,
-        ]);
+        lastPhaseAt = performance.now();
+        loadWatch = setInterval(() => {
+          const seconds = Math.floor((performance.now() - lastPhaseAt) / 1000);
+          if (seconds >= 45 && !terminalError) {
+            runtimeStatus.textContent = 'Sem nova etapa há ' + seconds + 's · ' +
+              (lastPhase || 'inicialização') + ' · Se persistir, copie o diagnóstico abaixo.';
+          }
+        }, 5000);
+        await withTimeout(engine.start({
+          canvas,
+          args: ['--main-pack', pack, '--', '--base-path=/vic2'],
+        }), 120000, 'O projeto não iniciou em 120 segundos. Reinicie a página antes de tentar novamente.');
 
         log('Godot iniciou o projeto; OpenVic está processando os dados montados em /vic2.');
       } catch (err) {
-        launcher.style.display = 'grid';
+        clearInterval(loadWatch);
+        document.body.classList.remove('running');
+        launcher.style.display = 'block';
         canvas.style.display = 'none';
         runtimeStatus.style.display = 'none';
         showError(err);
         status.textContent = 'Falha ao iniciar.';
-        launchButton.disabled = false;
-        starting = false;
+        // A partially started Emscripten instance cannot safely be started twice.
+        status.textContent = 'Reinicie a página pelo diagnóstico para tentar novamente.';
+        document.getElementById('diagnostics').open = true;
       }
     }
 
-    window.addEventListener('error', event => {
-      runtimeStatus.classList.add('error');
-      runtimeStatus.textContent = 'JavaScript: ' + (event.message || 'erro desconhecido');
-      runtimeStatus.style.display = 'block';
-    });
-    window.addEventListener('unhandledrejection', event => {
-      runtimeStatus.classList.add('error');
-      runtimeStatus.textContent = 'Promise: ' + String(event.reason || 'rejeição não tratada').slice(0, 240);
-      runtimeStatus.style.display = 'block';
+    window.addEventListener('error', event => runtimeError('JavaScript: ' + (event.message || 'erro desconhecido')));
+    window.addEventListener('unhandledrejection', event => runtimeError('Promise: ' + String(event.reason)));
+    document.getElementById('reload').addEventListener('click', () => location.reload());
+    document.getElementById('copy-log').addEventListener('click', async () => {
+      const text = ['Victoria II Web · launcher-v2',
+        'Threads: ' + GODOT_THREADS_ENABLED + ' · Isolamento: ' + globalThis.crossOriginIsolated,
+        'Última etapa: ' + (lastPhase || 'inicialização'), ...logLines].join('\n');
+      try {
+        await navigator.clipboard.writeText(text);
+        document.getElementById('copy-status').textContent = 'Copiado';
+      } catch {
+        document.getElementById('copy-status').textContent = 'Selecione e copie o texto abaixo.';
+        const range = document.createRange();
+        range.selectNodeContents(logEl);
+        const selection = window.getSelection();
+        selection.removeAllRanges();
+        selection.addRange(range);
+      }
     });
 
     launchButton.addEventListener('click', boot);

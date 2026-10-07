@@ -14,3 +14,6 @@ vendor/
 build/
 dist/
 .godot/
+
+__pycache__/
+node_modules/
