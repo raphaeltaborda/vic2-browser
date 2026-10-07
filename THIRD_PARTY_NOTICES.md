@@ -31,7 +31,7 @@ subject to Godot's upstream license and third-party notices.
 
 Source: https://github.com/emscripten-core/emscripten
 
-The WebAssembly toolchain version is pinned by the GitHub Actions workflow.
+The current WebAssembly toolchain is pinned to Emscripten 4.0.11 by the GitHub Actions workflow.
 
 ## Victoria II
 
