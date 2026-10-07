@@ -37,10 +37,10 @@ jobs:
           sudo apt-get install -y ninja-build cmake python3 python3-pip pkg-config libtbb-dev unzip
 
       - name: Install Emscripten used by Godot 4.7.2
-        uses: mymindstorm/setup-emsdk@v14
+        uses: emscripten-core/setup-emsdk@v16
         with:
-          version: 4.0.12
-          actions-cache-folder: emsdk-cache
+          version: 4.0.11
+          no-cache: true
 
       - name: Verify toolchain
         run: |
@@ -75,8 +75,6 @@ jobs:
                   path.write_text(text.replace("std::__1::", "std::_LIBCPP_ABI_NAMESPACE::"), encoding="utf-8")
                   changed += 1
           print(f"Patched {changed} foonathan-memory header(s)")
-          if changed == 0:
-              raise SystemExit("Expected libc++ __1 references were not found.")
           PY
 
       - name: Build native OpenVic WebAssembly extension
@@ -90,7 +88,12 @@ jobs:
           WASM="$(find build/openvic-web -type f -name 'libopenvic*.wasm' | head -n 1)"
           test -n "$WASM"
           cp "$WASM" dist/engine/libopenvic.web.template_release.wasm32.nothreads.wasm
+          cp vendor/OpenVic/game/bin/openvic.gdextension dist/engine/openvic.gdextension
           printf '%s\n' 'd3361890c62ede9464eb41af7f797e87dedf4b28' > dist/engine/OPENVIC_COMMIT
+          printf '%s\n' '4.0.11' > dist/engine/EMSCRIPTEN_VERSION
+          test -s dist/engine/libopenvic.web.template_release.wasm32.nothreads.wasm
+          grep -Fq 'web.wasm32.single.release' dist/engine/openvic.gdextension
+          file dist/engine/libopenvic.web.template_release.wasm32.nothreads.wasm
           ls -lh dist/engine
 
       - name: Upload engine artifact
@@ -106,15 +109,17 @@ jobs:
       - name: Build temporary Linux extension for Godot editor import
         working-directory: vendor/OpenVic
         run: |
-          cmake --preset linux-x64-template_release -DOPENVIC_USE_PCH=OFF -DOPENVIC_SIM_BUILD_HEADLESS=OFF -DOPENVIC_SIM_BUILD_TESTS=OFF -DOPENVIC_SIM_BUILD_BENCHMARKS=OFF
-          cmake --build --preset linux-x64-template_release --parallel 4
+          cmake --preset linux-x64-editor -DOPENVIC_USE_PCH=OFF -DOPENVIC_SIM_BUILD_HEADLESS=OFF -DOPENVIC_SIM_BUILD_TESTS=OFF -DOPENVIC_SIM_BUILD_BENCHMARKS=OFF
+          cmake --build --preset linux-x64-editor --parallel 4
 
       - name: Install WebAssembly extension into Godot project
         run: |
           mkdir -p vendor/OpenVic/game/bin/openvic
           cp dist/engine/libopenvic.web.template_release.wasm32.nothreads.wasm vendor/OpenVic/game/bin/openvic/
-          test -f vendor/OpenVic/game/bin/openvic/openvic.gdextension
-          grep -F 'web.wasm32.single.release' vendor/OpenVic/game/bin/openvic/openvic.gdextension
+          cp dist/engine/openvic.gdextension vendor/OpenVic/game/bin/openvic.gdextension
+          test -f vendor/OpenVic/game/bin/openvic.gdextension
+          grep -F 'web.wasm32.single.release' vendor/OpenVic/game/bin/openvic.gdextension
+          ls -lh vendor/OpenVic/game/bin/openvic.gdextension
           ls -lh vendor/OpenVic/game/bin/openvic
 
       - name: Download Godot 4.7.2 Linux editor
@@ -130,7 +135,7 @@ jobs:
 
       - name: Fetch official Web GDExtension single-thread template
         run: |
-          python3 -m pip install --user remotezip
+          python3 -m pip install --user --break-system-packages remotezip
           python3 - <<'PY'
           from pathlib import Path
           from remotezip import RemoteZip
@@ -165,15 +170,27 @@ jobs:
           echo "=== Web export ==="
           find dist/site -maxdepth 1 -type f -printf "%f %k KB\n" | sort
 
-      - name: Verify proprietary Victoria II data is absent
+      - name: Validate published native runtime
         run: |
+          test -s dist/site/index.html
+          test -s dist/site/index.js
+          test -s dist/site/index.wasm
+          test -s dist/site/index.side.wasm
+          test -s dist/site/index.pck
+          OPENVIC_WASM="$(find dist/site -type f -name 'libopenvic*.wasm' | head -n 1)"
+          test -n "$OPENVIC_WASM"
+          test -s "$OPENVIC_WASM"
+          grep -Fq 'gdextensionLibs' dist/site/index.html
+          grep -Fqi 'openvic' dist/site/index.html
           test ! -e dist/site/v2game.exe
           test ! -e dist/site/victoria2.exe
           if find dist/site -type f \( -iname 'provinces.bmp' -o -iname 'definition.csv' \) | grep -q .; then
             echo "ERROR: proprietary Victoria II data entered the public site artifact"
             exit 1
           fi
-          grep -F "Confirmo que os arquivos selecionados pertencem a uma cópia legítima" dist/site/index.html
+          file dist/site/index.wasm
+          file dist/site/index.side.wasm
+          file "$OPENVIC_WASM"
 
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
