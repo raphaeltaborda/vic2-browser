@@ -37,4 +37,4 @@ Game files and other proprietary Victoria II assets must not be committed to thi
 
 ## Status
 
-Early proof of concept.
+Early proof of concept. GitHub Pages deployment enabled.
