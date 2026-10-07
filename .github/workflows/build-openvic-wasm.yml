@@ -5,29 +5,27 @@ on:
     branches:
       - web-port-v2
     paths:
-      - 'patches/**'
-      - 'scripts/apply-openvic-patches.sh'
+      - 'patches/openvic/**'
+      - 'patches/openvic-scripts/**'
+      - 'patches/openvic-simulation/**'
       - '.github/workflows/build-openvic-wasm.yml'
   workflow_dispatch:
 
 permissions:
   contents: read
 
-concurrency:
-  group: clean-openvic-wasm-${{ github.ref }}
-  cancel-in-progress: true
-
 env:
   OPENVIC_COMMIT: d3361890c62ede9464eb41af7f797e87dedf4b28
+  OPENVIC_SCRIPTS_COMMIT: 8f83cabf147de7d8a511b4aaefd137777c4eb9c8
   EMSCRIPTEN_VERSION: 4.0.20
 
 jobs:
-  wasm-extension:
+  wasm:
     runs-on: ubuntu-24.04
-    timeout-minutes: 75
+    timeout-minutes: 60
 
     steps:
-      - name: Checkout vic2-browser
+      - name: Checkout port repository
         uses: actions/checkout@v4
 
       - name: Install Emscripten
@@ -35,62 +33,84 @@ jobs:
         with:
           version: ${{ env.EMSCRIPTEN_VERSION }}
 
-      - name: Verify toolchain
+      - name: Verify host tools
         run: |
-          emcc --version
-          em++ --version
           cmake --version
           ninja --version
+          em++ --version
 
-      - name: Fetch pinned OpenVic
+      - name: Fetch pinned OpenVic sources
         run: |
-          mkdir -p vendor
           git clone https://github.com/OpenVicProject/OpenVic.git vendor/OpenVic
           git -C vendor/OpenVic checkout --detach "$OPENVIC_COMMIT"
           git -C vendor/OpenVic submodule update --init --recursive
 
-      - name: Apply minimal Web patch series
-        run: bash scripts/apply-openvic-patches.sh vendor/OpenVic
+          git clone https://github.com/OpenVicProject/scripts.git vendor/OpenVic-scripts
+          git -C vendor/OpenVic-scripts checkout --detach "$OPENVIC_SCRIPTS_COMMIT"
+
+      - name: Apply isolated portability patches
+        run: |
+          git -C vendor/OpenVic apply --check ../../patches/openvic/0001-emscripten-side-module.patch
+          git -C vendor/OpenVic apply ../../patches/openvic/0001-emscripten-side-module.patch
+          git -C vendor/OpenVic diff --check
+
+          git -C vendor/OpenVic-scripts apply --check ../../patches/openvic-scripts/0001-portable-libcpp-abi-namespace.patch
+          git -C vendor/OpenVic-scripts apply ../../patches/openvic-scripts/0001-portable-libcpp-abi-namespace.patch
+          git -C vendor/OpenVic-scripts diff --check
+
+          git -C vendor/OpenVic/extension/deps/openvic-simulation apply --check ../../../../../patches/openvic-simulation/0001-wasm32-size-t-hashing.patch
+          git -C vendor/OpenVic/extension/deps/openvic-simulation apply ../../../../../patches/openvic-simulation/0001-wasm32-size-t-hashing.patch
+          git -C vendor/OpenVic/extension/deps/openvic-simulation diff --check
 
       - name: Configure wasm32 pthread build
         run: |
-          emcmake cmake             -S vendor/OpenVic             -B build/openvic-web             -G Ninja             -DCMAKE_BUILD_TYPE=Release             -DGODOTCPP_TARGET=template_release             -DGODOTCPP_THREADS=ON             -DGODOTCPP_PRECISION=single             -DOPENVIC_USE_PCH=OFF             -DOPENVIC_SIM_BUILD_HEADLESS=OFF             -DOPENVIC_SIM_BUILD_TESTS=OFF             -DOPENVIC_SIM_BUILD_BENCHMARKS=OFF             -DCMAKE_C_FLAGS=-pthread             -DCMAKE_CXX_FLAGS=-pthread
+          emcmake cmake \
+            -S vendor/OpenVic \
+            -B build/openvic-wasm \
+            -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DGODOTCPP_TARGET=template_release \
+            -DGODOTCPP_THREADS=ON \
+            -DGODOTCPP_PRECISION=single \
+            -DOPENVIC_USE_PCH=OFF \
+            -DOPENVIC_SIM_BUILD_HEADLESS=OFF \
+            -DOPENVIC_SIM_BUILD_TESTS=OFF \
+            -DOPENVIC_SIM_BUILD_BENCHMARKS=OFF \
+            -DFETCHCONTENT_SOURCE_DIR_OPENVIC_SCRIPTS="$GITHUB_WORKSPACE/vendor/OpenVic-scripts" \
+            -DCMAKE_CXX_FLAGS=-pthread
 
-      - name: Build OpenVic WebAssembly extension
-        run: cmake --build build/openvic-web --target openvic --parallel 4
+      - name: Build OpenVic side module
+        run: cmake --build build/openvic-wasm --target openvic --parallel 4
 
       - name: Validate WebAssembly artifact
         run: |
-          mkdir -p dist/engine
-
-          WASM="$(find build/openvic-web -type f -name 'libopenvic*.wasm' -print -quit)"
+          WASM="$(find build/openvic-wasm -type f -name 'libopenvic*.wasm' -print -quit)"
           test -n "$WASM"
-          cp "$WASM" dist/engine/libopenvic.web.template_release.wasm32.threads.wasm
-          cp vendor/OpenVic/game/bin/openvic.gdextension dist/engine/openvic.gdextension
+          test -s "$WASM"
 
-          printf '%s\n' "$OPENVIC_COMMIT" > dist/engine/OPENVIC_COMMIT
-          printf '%s\n' "$EMSCRIPTEN_VERSION" > dist/engine/EMSCRIPTEN_VERSION
-
-          test -s dist/engine/libopenvic.web.template_release.wasm32.threads.wasm
-          grep -Fq 'web.wasm32.single.release' dist/engine/openvic.gdextension
-
-          python3 - <<'PY'
+          python3 - "$WASM" <<'PY'
           from pathlib import Path
+          import sys
 
-          path = Path("dist/engine/libopenvic.web.template_release.wasm32.threads.wasm")
-          header = path.read_bytes()[:4]
-          if header != b"\x00asm":
-              raise SystemExit(f"Not a WebAssembly binary: magic={header.hex()}")
-          print(f"Validated WebAssembly binary: {path} ({path.stat().st_size} bytes)")
+          path = Path(sys.argv[1])
+          magic = path.read_bytes()[:4]
+          print(f"artifact={path}")
+          print(f"size={path.stat().st_size}")
+          print(f"magic={magic.hex()}")
+          if magic != b"\x00asm":
+              raise SystemExit("artifact is not a WebAssembly binary")
           PY
 
-          file dist/engine/libopenvic.web.template_release.wasm32.threads.wasm
-          ls -lh dist/engine
+          mkdir -p dist
+          cp "$WASM" dist/libopenvic.web.template_release.wasm32.threads.wasm
+          printf '%s\n' "$OPENVIC_COMMIT" > dist/OPENVIC_COMMIT
+          printf '%s\n' "$OPENVIC_SCRIPTS_COMMIT" > dist/OPENVIC_SCRIPTS_COMMIT
+          printf '%s\n' "$EMSCRIPTEN_VERSION" > dist/EMSCRIPTEN_VERSION
+          ls -lh dist
 
-      - name: Upload engine artifact
+      - name: Upload validated WASM
         uses: actions/upload-artifact@v4
         with:
-          name: clean-openvic-web-extension
-          path: dist/engine
+          name: openvic-wasm-stage1
+          path: dist
           if-no-files-found: error
-          retention-days: 30
