@@ -35,25 +35,32 @@ jobs:
         env:
           DEBIAN_FRONTEND: noninteractive
         run: |
+          missing=()
+          command -v ninja >/dev/null 2>&1 || missing+=(ninja-build)
+          command -v cmake >/dev/null 2>&1 || missing+=(cmake)
+          command -v python3 >/dev/null 2>&1 || missing+=(python3)
+          command -v pkg-config >/dev/null 2>&1 || missing+=(pkg-config)
+          command -v ccache >/dev/null 2>&1 || missing+=(ccache)
+
+          if [ "${#missing[@]}" -eq 0 ]; then
+            echo "WASM build tools already present on runner; skipping apt entirely."
+            exit 0
+          fi
+
           APT_OPTS=(
-            -o Acquire::Retries=5
-            -o Acquire::http::Timeout=20
-            -o Acquire::https::Timeout=20
+            -o Acquire::Retries=2
+            -o Acquire::http::Timeout=15
+            -o Acquire::https::Timeout=15
             -o Acquire::ForceIPv4=true
           )
-          for attempt in 1 2 3; do
-            echo "apt update attempt $attempt/3"
-            if timeout 180s sudo apt-get "${APT_OPTS[@]}" update; then
-              break
-            fi
-            if [ "$attempt" -eq 3 ]; then
-              echo "apt update failed after 3 bounded attempts."
-              exit 1
-            fi
-            sleep $((attempt * 5))
-          done
-          timeout 300s sudo apt-get "${APT_OPTS[@]}" install -y --no-install-recommends \
-            ninja-build cmake python3 pkg-config ccache
+          echo "Missing packages: ${missing[*]}"
+          if timeout 120s sudo apt-get "${APT_OPTS[@]}" install -y --no-install-recommends "${missing[@]}"; then
+            exit 0
+          fi
+
+          echo "Direct install failed; refreshing package lists once."
+          timeout 90s sudo apt-get "${APT_OPTS[@]}" update
+          timeout 180s sudo apt-get "${APT_OPTS[@]}" install -y --no-install-recommends "${missing[@]}"
 
       - name: Restore wasm compiler cache
         uses: actions/cache@v4
@@ -182,25 +189,33 @@ jobs:
         env:
           DEBIAN_FRONTEND: noninteractive
         run: |
+          missing=()
+          command -v ninja >/dev/null 2>&1 || missing+=(ninja-build)
+          command -v cmake >/dev/null 2>&1 || missing+=(cmake)
+          command -v python3 >/dev/null 2>&1 || missing+=(python3)
+          command -v pkg-config >/dev/null 2>&1 || missing+=(pkg-config)
+          command -v ccache >/dev/null 2>&1 || missing+=(ccache)
+          dpkg-query -W -f='${Status}' libtbb-dev 2>/dev/null | grep -q "install ok installed" || missing+=(libtbb-dev)
+
+          if [ "${#missing[@]}" -eq 0 ]; then
+            echo "Linux editor build tools already present on runner; skipping apt entirely."
+            exit 0
+          fi
+
           APT_OPTS=(
-            -o Acquire::Retries=5
-            -o Acquire::http::Timeout=20
-            -o Acquire::https::Timeout=20
+            -o Acquire::Retries=2
+            -o Acquire::http::Timeout=15
+            -o Acquire::https::Timeout=15
             -o Acquire::ForceIPv4=true
           )
-          for attempt in 1 2 3; do
-            echo "apt update attempt $attempt/3"
-            if timeout 180s sudo apt-get "${APT_OPTS[@]}" update; then
-              break
-            fi
-            if [ "$attempt" -eq 3 ]; then
-              echo "apt update failed after 3 bounded attempts."
-              exit 1
-            fi
-            sleep $((attempt * 5))
-          done
-          timeout 300s sudo apt-get "${APT_OPTS[@]}" install -y --no-install-recommends \
-            ninja-build cmake python3 pkg-config libtbb-dev ccache
+          echo "Missing packages: ${missing[*]}"
+          if timeout 120s sudo apt-get "${APT_OPTS[@]}" install -y --no-install-recommends "${missing[@]}"; then
+            exit 0
+          fi
+
+          echo "Direct install failed; refreshing package lists once."
+          timeout 90s sudo apt-get "${APT_OPTS[@]}" update
+          timeout 180s sudo apt-get "${APT_OPTS[@]}" install -y --no-install-recommends "${missing[@]}"
 
       - name: Restore Linux editor compiler cache
         uses: actions/cache@v4
