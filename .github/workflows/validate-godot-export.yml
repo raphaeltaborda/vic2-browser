@@ -45,21 +45,11 @@ jobs:
           python3 scripts/patch_openvic_web.py
           python3 scripts/prepare_openvic_godot_web.py
 
-      - name: Install official OpenVic Linux editor extension
+      - name: Build Linux editor extension
+        working-directory: vendor/OpenVic
         run: |
-          curl -L --fail --retry 3 \
-            -H "Accept: application/vnd.github+json" \
-            https://api.github.com/repos/OpenVicProject/OpenVic/actions/artifacts/11257329383/zip \
-            -o /tmp/openvic-extension.zip
-
-          ENTRY="$(unzip -Z1 /tmp/openvic-extension.zip | grep 'libopenvic.linux.editor.x86_64.so$' | head -n 1)"
-          test -n "$ENTRY"
-
-          mkdir -p vendor/OpenVic/game/bin/openvic
-          unzip -p /tmp/openvic-extension.zip "$ENTRY" > vendor/OpenVic/game/bin/openvic/libopenvic.linux.editor.x86_64.so
-          test -s vendor/OpenVic/game/bin/openvic/libopenvic.linux.editor.x86_64.so
-          file vendor/OpenVic/game/bin/openvic/libopenvic.linux.editor.x86_64.so
-          rm -f /tmp/openvic-extension.zip
+          cmake --preset linux-x64-editor -DOPENVIC_USE_PCH=OFF -DOPENVIC_SIM_BUILD_HEADLESS=OFF -DOPENVIC_SIM_BUILD_TESTS=OFF -DOPENVIC_SIM_BUILD_BENCHMARKS=OFF
+          cmake --build --preset linux-x64-editor --parallel 4
 
       - name: Install wasm into project
         run: |
