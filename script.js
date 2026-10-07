@@ -1,5 +1,6 @@
 const checksContainer = document.getElementById("checks");
 const nextStep = document.getElementById("next-step");
+const runtimeLink = document.getElementById("runtime-link");
 
 function supportsWasm() {
     try {
@@ -38,6 +39,7 @@ function addCheck(name, ok, detail, warning = false) {
 async function runDiagnostics() {
     checksContainer.innerHTML = "";
 
+    const isBrave = Boolean(navigator.brave);
     const wasm = supportsWasm();
     const webgl2 = supportsWebGL2();
     const indexedDBOk = "indexedDB" in window;
@@ -46,13 +48,34 @@ async function runDiagnostics() {
     const isolated = window.crossOriginIsolated === true;
     const sab = typeof SharedArrayBuffer !== "undefined";
 
+    addCheck("Navegador", true, isBrave ? "Brave" : "Chromium compatível");
     addCheck("WebAssembly", wasm, wasm ? "OK" : "indisponível");
     addCheck("WebGL 2", webgl2, webgl2 ? "OK" : "indisponível");
     addCheck("IndexedDB", indexedDBOk, indexedDBOk ? "OK" : "indisponível");
     addCheck("HTTPS / contexto seguro", secure, secure ? "OK" : "necessário");
-    addCheck("Service Worker", serviceWorkerOk, serviceWorkerOk ? "OK" : "indisponível");
-    addCheck("Cross-origin isolation", isolated, isolated ? "OK" : "ainda não ativo", !isolated);
-    addCheck("SharedArrayBuffer", sab, sab ? "OK" : "ainda não disponível", !sab);
+    addCheck("Service Worker", serviceWorkerOk, serviceWorkerOk ? "disponível" : "indisponível");
+
+    if (isBrave) {
+        addCheck(
+            "Isolamento por threads",
+            true,
+            "ignorado no modo Brave",
+            false
+        );
+    } else {
+        addCheck(
+            "Cross-origin isolation",
+            isolated,
+            isolated ? "OK" : "ainda não ativo",
+            !isolated
+        );
+        addCheck(
+            "SharedArrayBuffer",
+            sab,
+            sab ? "OK" : "ainda não disponível",
+            !sab
+        );
+    }
 
     let storageText = "não disponível";
     if (navigator.storage?.estimate) {
@@ -67,22 +90,30 @@ async function runDiagnostics() {
     }
     addCheck("Armazenamento do navegador", true, storageText);
 
-    const essentials = wasm && webgl2 && indexedDBOk && secure && serviceWorkerOk;
+    const essentials = wasm && webgl2 && indexedDBOk && secure;
 
     if (!essentials) {
         nextStep.textContent =
-            "Há um requisito básico faltando. Não vamos carregar o BoxedWine até corrigirmos isso.";
+            "Há um requisito básico faltando. O teste do BoxedWine foi bloqueado para evitar uma falha confusa.";
+        return;
+    }
+
+    runtimeLink.classList.remove("hidden");
+
+    if (isBrave) {
+        nextStep.textContent =
+            "Brave detectado. Vamos usar o runtime single-thread, sem depender de SharedArrayBuffer ou do isolamento que o Brave pode bloquear.";
         return;
     }
 
     if (!isolated || !sab) {
         nextStep.textContent =
-            "Os requisitos básicos estão presentes. O isolamento para threads ainda está sendo preparado pelo service worker; recarregar a página pode concluir esta etapa.";
+            "O runtime single-thread já pode ser testado. O isolamento para versões multi-thread ainda não está ativo.";
         return;
     }
 
     nextStep.textContent =
-        "Ambiente pronto. O próximo commit poderá carregar o runtime BoxedWine/WebAssembly e iniciar nosso primeiro executável de teste.";
+        "Ambiente completo. Você já pode abrir a próxima tela e iniciar o teste do BoxedWine.";
 }
 
 runDiagnostics();
