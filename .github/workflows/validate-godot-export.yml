@@ -6,6 +6,16 @@ on:
       - Build OpenVic Web port
     types:
       - completed
+  workflow_dispatch:
+    inputs:
+      build_run_id:
+        description: Successful Build OpenVic Web port run ID to reuse
+        required: true
+        default: "37594966382"
+  push:
+    branches: ["main"]
+    paths:
+      - ".github/workflows/validate-godot-export.yml"
 
 permissions:
   contents: read
@@ -13,9 +23,11 @@ permissions:
 
 jobs:
   export-smoke:
-    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 60
+    env:
+      OPENVIC_BUILD_RUN_ID: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.id || (github.event_name == 'workflow_dispatch' && inputs.build_run_id || '37594966382') }}
 
     steps:
       - name: Checkout vic2-browser
@@ -27,7 +39,7 @@ jobs:
           name: openvic-web-extension
           path: engine-artifact
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          run-id: ${{ github.event.workflow_run.id }}
+          run-id: ${{ env.OPENVIC_BUILD_RUN_ID }}
 
       - name: Assert OpenVic artifact is real WebAssembly
         run: |
@@ -113,13 +125,20 @@ jobs:
           test -s dist/site/index.side.wasm
           grep -F "Confirmo que os arquivos selecionados pertencem a uma cópia legítima" dist/site/index.html
 
+      - name: Upload export for inspection
+        uses: actions/upload-artifact@v4
+        with:
+          name: godot-web-export-smoke
+          path: dist/site
+          if-no-files-found: error
+
       - name: Smoke-test Godot and OpenVic in Chromium
         run: |
           python3 -m pip install --user --break-system-packages playwright
 
           CHROME="$(command -v google-chrome || command -v chromium || command -v chromium-browser || true)"
           test -n "$CHROME"
-          echo "CHROME=$CHROME" >> "$GITHUB_ENV"
+          export CHROME
 
           python3 -m http.server 8765 --directory dist/site >/tmp/openvic-http.log 2>&1 &
           SERVER_PID=$!
@@ -172,10 +191,3 @@ jobs:
 
           asyncio.run(main())
           PY
-
-      - name: Upload export for inspection
-        uses: actions/upload-artifact@v4
-        with:
-          name: godot-web-export-smoke
-          path: dist/site
-          if-no-files-found: error
