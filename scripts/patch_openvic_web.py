@@ -65,6 +65,22 @@ endif()'''
 if platform_block not in text:
     raise SystemExit("OpenVic CMake platform block changed upstream; refusing blind patch.")
 
+target_line = "add_library(openvic SHARED ${openvic_sources})\n"
+target_guard = """add_library(openvic SHARED ${openvic_sources})
+
+if(CMAKE_SYSTEM_NAME STREQUAL "Emscripten")
+    get_target_property(OV_OPENVIC_TARGET_TYPE openvic TYPE)
+    message(STATUS "OpenVic Web target type: ${OV_OPENVIC_TARGET_TYPE}")
+    if(NOT OV_OPENVIC_TARGET_TYPE STREQUAL "SHARED_LIBRARY")
+        message(FATAL_ERROR "OpenVic Web target degraded to ${OV_OPENVIC_TARGET_TYPE}; SIDE_MODULE build is impossible")
+    endif()
+endif()
+"""
+if "OV_OPENVIC_TARGET_TYPE" not in text:
+    if target_line not in text:
+        raise SystemExit("OpenVic add_library() layout changed upstream.")
+    text = text.replace(target_line, target_guard, 1)
+
 cmake.write_text(text.replace(platform_block, replacement), encoding="utf-8")
 
 gdext = OPENVIC / "game" / "bin" / "openvic.gdextension"
