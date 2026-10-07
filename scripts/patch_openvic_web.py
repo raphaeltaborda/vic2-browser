@@ -535,6 +535,169 @@ if parse_old not in dl:
     raise SystemExit("Pinned parser grammar call changed; refusing blind patch.")
 dl = dl.replace(parse_old, parse_new, 1)
 
+# Replace std::filesystem::directory_iterator in lookup_file's case-insensitive
+# fallback on Web. Exact-path lookups still use std::filesystem normally; only
+# the fallback directory scan switches to opendir/readdir, which is much more
+# reliable against Emscripten MEMFS from a pthread.
+if "#include <dirent.h>" not in dl:
+    dl = dl.replace(
+        "#include <cstdio>\n",
+        "#include <cstdio>\n#if defined(__EMSCRIPTEN__)\n#include <dirent.h>\n#endif\n",
+        1,
+    )
+
+lookup_old = """fs::path Dataloader::lookup_file(std::string_view path, bool print_error) const {
+	const fs::path filepath { ensure_forward_slash_path(path) };
+
+	const std::string_view filename = get_filename(path);
+	for (fs::path const& root : roots) {
+		const fs::path composed = root / filepath;
+		if (fs::is_regular_file(composed)) {
+			if (root == roots.back()) {
+				bool ignore = false;
+				for (fs::path const& replace_path : replace_paths) {
+					if (filepath.string().starts_with(replace_path.string())) {
+						ignore = true;
+						break;
+					}
+				}
+				if (!ignore) {
+					return composed;
+				}
+			} else {
+				return composed;
+			}
+		}
+		std::error_code ec;
+		for (fs::directory_entry const& entry : fs::directory_iterator { composed.parent_path(), ec }) {
+			if (entry.is_regular_file()) {
+				const fs::path file = entry;
+				if (ascii_equal_case_insensitive(file.filename().string(), filename)) {
+					if (root == roots.back()) {
+						bool ignore = false;
+						for (fs::path const& replace_path : replace_paths) {
+							if (filepath.string().starts_with(replace_path.string())) {
+								ignore = true;
+								break;
+							}
+						}
+						if (!ignore) {
+							return file;
+						}
+					} else {
+						return file;
+					}
+				}
+			}
+		}
+	}
+
+	if (print_error) {
+		spdlog::error_s("Lookup for \"{}\" failed!", path);
+	}
+	return {};
+}"""
+
+lookup_new = """fs::path Dataloader::lookup_file(std::string_view path, bool print_error) const {
+	const fs::path filepath { ensure_forward_slash_path(path) };
+
+	const std::string_view filename = get_filename(path);
+	for (fs::path const& root : roots) {
+		const fs::path composed = root / filepath;
+		if (fs::is_regular_file(composed)) {
+			if (root == roots.back()) {
+				bool ignore = false;
+				for (fs::path const& replace_path : replace_paths) {
+					if (filepath.string().starts_with(replace_path.string())) {
+						ignore = true;
+						break;
+					}
+				}
+				if (!ignore) {
+					return composed;
+				}
+			} else {
+				return composed;
+			}
+		}
+
+#if defined(__EMSCRIPTEN__)
+		const std::string parent = composed.parent_path().string();
+		DIR* directory = ::opendir(parent.c_str());
+		if (directory != nullptr) {
+			if (path.starts_with("sound/")) {
+				std::printf("[WebLoadRaw] sound lookup fallback: %.*s\\n", static_cast<int>(path.size()), path.data());
+				std::fflush(stdout);
+			}
+			while (dirent* entry = ::readdir(directory)) {
+				const std::string_view entry_name { entry->d_name };
+				if (!ascii_equal_case_insensitive(entry_name, filename)) {
+					continue;
+				}
+				const fs::path file = composed.parent_path() / entry->d_name;
+				if (!fs::is_regular_file(file)) {
+					continue;
+				}
+				::closedir(directory);
+				if (path.starts_with("sound/")) {
+					std::printf("[WebLoadRaw] sound lookup fallback matched: %s\\n", file.string().c_str());
+					std::fflush(stdout);
+				}
+				if (root == roots.back()) {
+					bool ignore = false;
+					for (fs::path const& replace_path : replace_paths) {
+						if (filepath.string().starts_with(replace_path.string())) {
+							ignore = true;
+							break;
+						}
+					}
+					if (!ignore) {
+						return file;
+					}
+				} else {
+					return file;
+				}
+				break;
+			}
+			::closedir(directory);
+		}
+#else
+		std::error_code ec;
+		for (fs::directory_entry const& entry : fs::directory_iterator { composed.parent_path(), ec }) {
+			if (entry.is_regular_file()) {
+				const fs::path file = entry;
+				if (ascii_equal_case_insensitive(file.filename().string(), filename)) {
+					if (root == roots.back()) {
+						bool ignore = false;
+						for (fs::path const& replace_path : replace_paths) {
+							if (filepath.string().starts_with(replace_path.string())) {
+								ignore = true;
+								break;
+							}
+						}
+						if (!ignore) {
+							return file;
+						}
+					} else {
+						return file;
+					}
+				}
+			}
+		}
+#endif
+	}
+
+	if (print_error) {
+		spdlog::error_s("Lookup for \"{}\" failed!", path);
+	}
+	return {};
+}"""
+
+if lookup_new not in dl:
+    if lookup_old not in dl:
+        raise SystemExit("Pinned Dataloader::lookup_file changed; refusing blind Web fallback patch.")
+    dl = dl.replace(lookup_old, lookup_new, 1)
+
 dataloader_cpp.write_text(dl, encoding="utf-8")
 print("Raw Web definition-loader diagnostics patched.")
 
@@ -616,6 +779,49 @@ if load_file_new not in ph:
     ph = ph.replace(load_file_old, load_file_new, 1)
 parse_handler_hpp.write_text(ph, encoding="utf-8")
 print("OpenVic-Dataloader Web file loading patched to avoid lexy mmap path.")
+
+# Trace the sound definition walker itself. This is intentionally Web-only and
+# prints one concise line before and after resolving each referenced WAV path.
+sound_effect_cpp = sim / "src/openvic-simulation/misc/SoundEffect.cpp"
+se = sound_effect_cpp.read_text(encoding="utf-8")
+if "#include <cstdio>" not in se:
+    se = se.replace('#include "SoundEffect.hpp"\n', '#include "SoundEffect.hpp"\n\n#include <cstdio>\n', 1)
+sound_define_old = """	auto file_callback = [&dataloader, &file](std::string_view val) -> bool {
+		memory::string lookup = memory::fmt::format("sound/{}", val);
+		file = dataloader.lookup_file(lookup, false);
+		if (file.empty()) {
+			spdlog::warn_s("Lookup for \"{}\" failed!", lookup);
+		}
+		return true;
+	};"""
+sound_define_new = """	auto file_callback = [&dataloader, &file, sfx_identifier](std::string_view val) -> bool {
+		memory::string lookup = memory::fmt::format("sound/{}", val);
+#if defined(__EMSCRIPTEN__)
+		std::printf(
+			"[WebLoadRaw] sound define %.*s -> %s\\n",
+			static_cast<int>(sfx_identifier.size()), sfx_identifier.data(), lookup.c_str()
+		);
+		std::fflush(stdout);
+#endif
+		file = dataloader.lookup_file(lookup, false);
+#if defined(__EMSCRIPTEN__)
+		std::printf(
+			"[WebLoadRaw] sound define resolved: %s\\n",
+			file.empty() ? "<missing>" : file.string().c_str()
+		);
+		std::fflush(stdout);
+#endif
+		if (file.empty()) {
+			spdlog::warn_s("Lookup for \"{}\" failed!", lookup);
+		}
+		return true;
+	};"""
+if sound_define_new not in se:
+    if sound_define_old not in se:
+        raise SystemExit("Pinned SoundEffect file callback changed; refusing blind diagnostic patch.")
+    se = se.replace(sound_define_old, sound_define_new, 1)
+sound_effect_cpp.write_text(se, encoding="utf-8")
+print("OpenVic Web sound-definition lookup diagnostics patched.")
 
 ecs_cpp = sim / "src/openvic-simulation/core/ecs/EcsThreadPool.cpp"
 ecs_text = ecs_cpp.read_text(encoding="utf-8")

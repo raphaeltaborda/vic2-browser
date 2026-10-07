@@ -139,3 +139,19 @@ test('Web dataloader bypasses lexy mmap with buffered file IO', () => {
   assert.match(portPatch, /#if defined\(__EMSCRIPTEN__\)/);
   assert.match(portPatch, /load_buffer_impl\(std::move\(buffer\), path, fallback\)/);
 });
+
+
+test('Web lookup_file uses opendir fallback instead of filesystem directory_iterator', () => {
+  const portPatch = fs.readFileSync('scripts/patch_openvic_web.py', 'utf8');
+  assert.match(portPatch, /#include <dirent\.h>/);
+  assert.match(portPatch, /::opendir\(parent\.c_str\(\)\)/);
+  assert.match(portPatch, /::readdir\(directory\)/);
+  assert.match(portPatch, /sound lookup fallback/);
+  assert.match(portPatch, /#else\n\t\tstd::error_code ec;/);
+});
+
+test('sound definition walker is traced around each Web file lookup', () => {
+  const portPatch = fs.readFileSync('scripts/patch_openvic_web.py', 'utf8');
+  assert.match(portPatch, /sound define %\.\*s -> %s/);
+  assert.match(portPatch, /sound define resolved: %s/);
+});
