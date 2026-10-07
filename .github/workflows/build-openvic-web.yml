@@ -69,7 +69,7 @@ jobs:
 
       - name: Build OpenVic WebAssembly extension
         run: |
-          cmake --build build/openvic-web --target openvic --parallel 2
+          cmake --build build/openvic-web --target openvic --parallel 4
           echo "=== WebAssembly outputs ==="
           find build/openvic-web vendor/OpenVic/game/bin/openvic -type f             \( -name "*.wasm" -o -name "*.a" \) -printf "%p %k KB\n" | sort
 
