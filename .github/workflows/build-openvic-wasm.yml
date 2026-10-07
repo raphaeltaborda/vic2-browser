@@ -6,6 +6,7 @@ on:
       - web-port-v2
     paths:
       - 'patches/openvic/**'
+      - 'patches/openvic-scripts/**'
       - '.github/workflows/build-openvic-wasm.yml'
   workflow_dispatch:
 
@@ -14,6 +15,7 @@ permissions:
 
 env:
   OPENVIC_COMMIT: d3361890c62ede9464eb41af7f797e87dedf4b28
+  OPENVIC_SCRIPTS_COMMIT: 8f83cabf147de7d8a511b4aaefd137777c4eb9c8
   EMSCRIPTEN_VERSION: 4.0.20
 
 jobs:
@@ -36,21 +38,41 @@ jobs:
           ninja --version
           em++ --version
 
-      - name: Fetch pinned OpenVic
+      - name: Fetch pinned OpenVic sources
         run: |
           git clone https://github.com/OpenVicProject/OpenVic.git vendor/OpenVic
           git -C vendor/OpenVic checkout --detach "$OPENVIC_COMMIT"
           git -C vendor/OpenVic submodule update --init --recursive
 
-      - name: Apply minimal Emscripten build patch
+          git clone https://github.com/OpenVicProject/scripts.git vendor/OpenVic-scripts
+          git -C vendor/OpenVic-scripts checkout --detach "$OPENVIC_SCRIPTS_COMMIT"
+
+      - name: Apply isolated portability patches
         run: |
           git -C vendor/OpenVic apply --check ../../patches/openvic/0001-emscripten-side-module.patch
           git -C vendor/OpenVic apply ../../patches/openvic/0001-emscripten-side-module.patch
           git -C vendor/OpenVic diff --check
 
+          git -C vendor/OpenVic-scripts apply --check ../../patches/openvic-scripts/0001-portable-libcpp-abi-namespace.patch
+          git -C vendor/OpenVic-scripts apply ../../patches/openvic-scripts/0001-portable-libcpp-abi-namespace.patch
+          git -C vendor/OpenVic-scripts diff --check
+
       - name: Configure wasm32 pthread build
         run: |
-          emcmake cmake             -S vendor/OpenVic             -B build/openvic-wasm             -G Ninja             -DCMAKE_BUILD_TYPE=Release             -DGODOTCPP_TARGET=template_release             -DGODOTCPP_THREADS=ON             -DGODOTCPP_PRECISION=single             -DOPENVIC_USE_PCH=OFF             -DOPENVIC_SIM_BUILD_HEADLESS=OFF             -DOPENVIC_SIM_BUILD_TESTS=OFF             -DOPENVIC_SIM_BUILD_BENCHMARKS=OFF             -DCMAKE_CXX_FLAGS=-pthread
+          emcmake cmake \
+            -S vendor/OpenVic \
+            -B build/openvic-wasm \
+            -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DGODOTCPP_TARGET=template_release \
+            -DGODOTCPP_THREADS=ON \
+            -DGODOTCPP_PRECISION=single \
+            -DOPENVIC_USE_PCH=OFF \
+            -DOPENVIC_SIM_BUILD_HEADLESS=OFF \
+            -DOPENVIC_SIM_BUILD_TESTS=OFF \
+            -DOPENVIC_SIM_BUILD_BENCHMARKS=OFF \
+            -DFETCHCONTENT_SOURCE_DIR_OPENVIC_SCRIPTS="$GITHUB_WORKSPACE/vendor/OpenVic-scripts" \
+            -DCMAKE_CXX_FLAGS=-pthread
 
       - name: Build OpenVic side module
         run: cmake --build build/openvic-wasm --target openvic --parallel 4
@@ -77,6 +99,7 @@ jobs:
           mkdir -p dist
           cp "$WASM" dist/libopenvic.web.template_release.wasm32.threads.wasm
           printf '%s\n' "$OPENVIC_COMMIT" > dist/OPENVIC_COMMIT
+          printf '%s\n' "$OPENVIC_SCRIPTS_COMMIT" > dist/OPENVIC_SCRIPTS_COMMIT
           printf '%s\n' "$EMSCRIPTEN_VERSION" > dist/EMSCRIPTEN_VERSION
           ls -lh dist
 
