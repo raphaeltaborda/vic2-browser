@@ -300,7 +300,7 @@
 
         await engine.start({
           canvas,
-          args: ['--main-pack', pack, '--base-path=/vic2'],
+          args: ['--main-pack', pack, '--', '--base-path=/vic2'],
         });
 
         launcher.style.display = 'none';
