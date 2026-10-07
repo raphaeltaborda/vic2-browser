@@ -1,0 +1,121 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+Subject: [PATCH] Generate libc++ node sizes with the configured ABI namespace
+
+The OpenVic memory header generator hard-codes libc++'s historical __1 ABI
+namespace. Modern libc++ may select another namespace (Emscripten 4.0.20 uses
+__2). Use libc++'s own _LIBCPP_ABI_NAMESPACE macro instead.
+
+diff --git a/gen/codegen.py b/gen/codegen.py
+--- a/gen/codegen.py
++++ b/gen/codegen.py
+@@ -531,99 +531,99 @@
+     containers = {
+         "forward_list": [
+-            "calculate_node_size<Alignment, std::__1::__forward_list_node<alignment_type_t<Alignment>, void*>>()",
++            "calculate_node_size<Alignment, std::_LIBCPP_ABI_NAMESPACE::__forward_list_node<alignment_type_t<Alignment>, void*>>()",
+             "calculate_node_size<Alignment, std::_Fwd_list_node<alignment_type_t<Alignment>>>()",
+             "calculate_node_size<Alignment, std::_Flist_node<alignment_type_t<Alignment>, void*>>()",
+         ],
+         "list": [
+-            "calculate_node_size<Alignment, std::__1::__list_node<alignment_type_t<Alignment>, void*>>()",
++            "calculate_node_size<Alignment, std::_LIBCPP_ABI_NAMESPACE::__list_node<alignment_type_t<Alignment>, void*>>()",
+             "calculate_node_size<Alignment, std::_List_node<alignment_type_t<Alignment>>>()",
+             "calculate_node_size<Alignment, std::_List_node<alignment_type_t<Alignment>, void*>>()",
+         ],
+         "set": [
+-            "calculate_node_size<Alignment, std::__1::__tree_node<alignment_type_t<Alignment>, void*>>()",
++            "calculate_node_size<Alignment, std::_LIBCPP_ABI_NAMESPACE::__tree_node<alignment_type_t<Alignment>, void*>>()",
+             "calculate_node_size<Alignment, std::_Rb_tree_node<alignment_type_t<Alignment>>>()",
+             "calculate_node_size<Alignment, std::_Tree_node<alignment_type_t<Alignment>, void*>>()",
+         ],
+         "multiset": [],
+         "unordered_set": [
+-            "calculate_node_size<Alignment, std::__1::__hash_node<alignment_type_t<Alignment>, void*>>()",
++            "calculate_node_size<Alignment, std::_LIBCPP_ABI_NAMESPACE::__hash_node<alignment_type_t<Alignment>, void*>>()",
+             "calculate_node_size<Alignment, typename std::__detail::_Hash_node<alignment_type_t<Alignment>, true>>()",
+             "calculate_node_size<Alignment, std::_List_node<alignment_type_t<Alignment>, void*>>()",
+         ],
+         "unordered_multiset": [],
+         "map": [
+             """
+ calculate_node_size_by_type<
+-    std::__1::pair<const alignment_type_t<Alignment>, alignment_type_t<Alignment>>,
++    std::_LIBCPP_ABI_NAMESPACE::pair<const alignment_type_t<Alignment>, alignment_type_t<Alignment>>,
+-    std::__1::__tree_node<
++    std::_LIBCPP_ABI_NAMESPACE::__tree_node<
+-        std::__1::__value_type<alignment_type_t<Alignment>, alignment_type_t<Alignment>>,
++        std::_LIBCPP_ABI_NAMESPACE::__value_type<alignment_type_t<Alignment>, alignment_type_t<Alignment>>,
+         void*>>()
+ """,
+             """
+ calculate_node_size_by_type<
+     std::pair<const alignment_type_t<Alignment>, alignment_type_t<Alignment>>,
+     std::_Rb_tree_node<
+         std::pair<const alignment_type_t<Alignment>, alignment_type_t<Alignment>>>>()
+ """,
+             """
+ calculate_node_size_by_type<
+     std::pair<const alignment_type_t<Alignment>, alignment_type_t<Alignment>>,
+     std::_Tree_node<
+         std::pair<const alignment_type_t<Alignment>, alignment_type_t<Alignment>>,
+         void*>>()
+ """,
+         ],
+         "multimap": [],
+         "unordered_map": [
+             """
+ calculate_node_size_by_type<
+-    std::__1::pair<const alignment_type_t<Alignment>, alignment_type_t<Alignment>>,
++    std::_LIBCPP_ABI_NAMESPACE::pair<const alignment_type_t<Alignment>, alignment_type_t<Alignment>>,
+-    std::__1::__hash_node<std::__1::__hash_value_type<alignment_type_t<Alignment>,
++    std::_LIBCPP_ABI_NAMESPACE::__hash_node<std::_LIBCPP_ABI_NAMESPACE::__hash_value_type<alignment_type_t<Alignment>,
+                                                     alignment_type_t<Alignment>>,
+                         void*>>()
+ """,
+             """
+ calculate_node_size_by_type<
+     std::pair<const alignment_type_t<Alignment>, alignment_type_t<Alignment>>,
+     std::__detail::_Hash_node<
+         std::pair<const alignment_type_t<Alignment>, alignment_type_t<Alignment>>,
+         true>>()
+ """,
+             """
+ calculate_node_size_by_type<
+     std::pair<const alignment_type_t<Alignment>, alignment_type_t<Alignment>>,
+     std::_List_node<
+         std::pair<const alignment_type_t<Alignment>, alignment_type_t<Alignment>>,
+         void*>>()
+ """,
+         ],
+         "unordered_multimap": [],
+         "shared_ptr_stateless": [
+             """
+ calculate_node_size<Alignment,
+-    std::__1::__shared_ptr_emplace<
++    std::_LIBCPP_ABI_NAMESPACE::__shared_ptr_emplace<
+         alignment_type_t<Alignment>,
+         std::allocator<alignment_type_t<Alignment>>>,
+     false>()
+ """,
+             """
+ calculate_node_size<Alignment,
+     std::_Sp_counted_ptr_inplace<alignment_type_t<Alignment>,
+                                 std::allocator<alignment_type_t<Alignment>>,
+                                 __gnu_cxx::_S_atomic>,
+     false>()
+ """,
+             """
+ calculate_node_size<
+     Alignment,
+     std::_Ref_count_obj_alloc3<std::remove_cv_t<alignment_type_t<Alignment>>,
+                                 allocator_type<Alignment>>,
+     false>()
+ """,
+         ],
+         "shared_ptr_stateful": [
+             """
+ calculate_node_size<Alignment,
+-    std::__1::__shared_ptr_emplace<
++    std::_LIBCPP_ABI_NAMESPACE::__shared_ptr_emplace<
+         alignment_type_t<Alignment>,
+         std::pmr::polymorphic_allocator<alignment_type_t<Alignment>>>,
