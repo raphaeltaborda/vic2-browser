@@ -416,6 +416,77 @@ dl = dl.replace('SPDLOG_INFO("[WebLoad] map + provinces");', 'std::printf("[WebL
 dl = dl.replace('SPDLOG_INFO("[WebLoad] units/rebels/technology");', 'std::printf("[WebLoadRaw] units/rebels/technology\\n"); std::fflush(stdout);')
 dl = dl.replace('SPDLOG_INFO("[WebLoad] history/events");', 'std::printf("[WebLoadRaw] history/events\\n"); std::fflush(stdout);')
 dl = dl.replace('SPDLOG_INFO("[WebLoad] definitions parsed");', 'std::printf("[WebLoadRaw] definitions parsed\\n"); std::fflush(stdout);')
+# Split the first definition phase into filesystem / parser / manager calls.
+sound_old = """bool Dataloader::_load_sound_effect_defines(DefinitionManager& definition_manager) const {
+\tstatic constexpr std::string_view sfx_file = "interface/sound.sfx";
+\tconst fs::path path = lookup_file(sfx_file);
+
+\tbool ret = true;
+\tSoundEffectManager& sound_effect_manager = definition_manager.get_sound_effect_manager();
+
+\tret &= sound_effect_manager.load_sound_defines_file(*this, parse_defines(path).get_file_node());
+
+\tsound_effect_manager.lock_sound_effects();
+
+\treturn ret;
+
+}"""
+sound_new = """bool Dataloader::_load_sound_effect_defines(DefinitionManager& definition_manager) const {
+\tstd::printf("[WebLoadRaw] sound.sfx: enter\\n");
+\tstd::fflush(stdout);
+\tstatic constexpr std::string_view sfx_file = "interface/sound.sfx";
+\tstd::printf("[WebLoadRaw] sound.sfx: lookup_file\\n");
+\tstd::fflush(stdout);
+\tconst fs::path path = lookup_file(sfx_file);
+\tstd::printf("[WebLoadRaw] sound.sfx: lookup done: %s\\n", path.string().c_str());
+\tstd::fflush(stdout);
+
+\tbool ret = true;
+\tSoundEffectManager& sound_effect_manager = definition_manager.get_sound_effect_manager();
+
+\tstd::printf("[WebLoadRaw] sound.sfx: parse_defines begin\\n");
+\tstd::fflush(stdout);
+\tauto parsed_sound = parse_defines(path);
+\tstd::printf("[WebLoadRaw] sound.sfx: parse_defines done\\n");
+\tstd::fflush(stdout);
+\tret &= sound_effect_manager.load_sound_defines_file(*this, parsed_sound.get_file_node());
+\tstd::printf("[WebLoadRaw] sound.sfx: manager load done\\n");
+\tstd::fflush(stdout);
+
+\tsound_effect_manager.lock_sound_effects();
+\tstd::printf("[WebLoadRaw] sound.sfx: locked\\n");
+\tstd::fflush(stdout);
+
+\treturn ret;
+
+}"""
+if sound_new not in dl:
+    if sound_old not in dl:
+        raise SystemExit("Pinned sound effect loader changed; refusing blind patch.")
+    dl = dl.replace(sound_old, sound_new, 1)
+
+iface_old = """bool Dataloader::_load_interface_files(UIManager& ui_manager) const {
+\tstatic constexpr std::string_view interface_directory = "interface/";
+
+\tbool ret = apply_to_files(
+\t\tlookup_files_in_dir(interface_directory, ".gfx"),"""
+iface_new = """bool Dataloader::_load_interface_files(UIManager& ui_manager) const {
+\tstd::printf("[WebLoadRaw] interface: enter\\n");
+\tstd::fflush(stdout);
+\tstatic constexpr std::string_view interface_directory = "interface/";
+
+\tstd::printf("[WebLoadRaw] interface: listing .gfx files\\n");
+\tstd::fflush(stdout);
+\tauto gfx_files = lookup_files_in_dir(interface_directory, ".gfx");
+\tstd::printf("[WebLoadRaw] interface: %zu .gfx files found\\n", gfx_files.size());
+\tstd::fflush(stdout);
+\tbool ret = apply_to_files(
+\t\tgfx_files,"""
+if iface_new not in dl:
+    if iface_old not in dl:
+        raise SystemExit("Pinned interface loader changed; refusing blind patch.")
+    dl = dl.replace(iface_old, iface_new, 1)
+
 dataloader_cpp.write_text(dl, encoding="utf-8")
 print("Raw Web definition-loader diagnostics patched.")
 
