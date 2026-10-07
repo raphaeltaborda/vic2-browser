@@ -9,14 +9,14 @@ behavior and use explicit 32-bit hashing/folding on 32-bit targets.
 diff --git a/src/openvic-simulation/core/Hash.hpp b/src/openvic-simulation/core/Hash.hpp
 --- a/src/openvic-simulation/core/Hash.hpp
 +++ b/src/openvic-simulation/core/Hash.hpp
-@@ -1,5 +1,6 @@
+@@ -3,5 +3,6 @@
  #include <climits>
  #include <cstddef>
 +#include <cstdint>
  #include <functional>
  #include <tuple>
  
-@@ -7,11 +8,21 @@
+@@ -9,11 +10,21 @@
  	static constexpr std::size_t MURMUR3_SEED = 0x7F07C65;
  
  	inline constexpr std::size_t hash_murmur3(std::size_t key, std::size_t seed = MURMUR3_SEED) {
@@ -48,7 +48,7 @@ diff --git a/src/openvic-simulation/core/Hash.hpp b/src/openvic-simulation/core/
 diff --git a/src/openvic-simulation/types/OrderedContainers.hpp b/src/openvic-simulation/types/OrderedContainers.hpp
 --- a/src/openvic-simulation/types/OrderedContainers.hpp
 +++ b/src/openvic-simulation/types/OrderedContainers.hpp
-@@ -1,12 +1,18 @@
+@@ -119,12 +119,18 @@
  	private:
  		/* Based on the byte array hashing functions in MSVC's <type_traits>. */
  		[[nodiscard]] static constexpr size_t _hash_bytes_case_insensitive(char const* first, size_t count) {
@@ -74,7 +74,7 @@ diff --git a/src/openvic-simulation/types/OrderedContainers.hpp b/src/openvic-si
 diff --git a/src/openvic-simulation/pathfinding/PointMap.hpp b/src/openvic-simulation/pathfinding/PointMap.hpp
 --- a/src/openvic-simulation/pathfinding/PointMap.hpp
 +++ b/src/openvic-simulation/pathfinding/PointMap.hpp
-@@ -1,6 +1,19 @@
+@@ -64,6 +64,19 @@
  		struct SegmentHash {
  			inline constexpr std::size_t operator()(Segment const& segment) const {
 -				return hash_murmur3(hash_murmur3(segment.key.first) << 32) |
