@@ -97,6 +97,38 @@ footer {
     color: #aeb4bd;
 }
 
+.primary-button {
+    display: inline-block;
+    margin-top: 10px;
+    padding: 12px 16px;
+    border-radius: 7px;
+    background: #f3f4f6;
+    color: #111317;
+    text-decoration: none;
+    font-weight: 700;
+}
+
+.primary-button:hover {
+    opacity: 0.9;
+}
+
+.hidden {
+    display: none;
+}
+
+.runtime-frame {
+    width: 100%;
+    min-height: 640px;
+    border: 1px solid #303640;
+    border-radius: 8px;
+    background: #000;
+}
+
+.back-link {
+    color: #c8ced8;
+    text-decoration: none;
+}
+
 footer {
     margin-top: 28px;
     font-size: 13px;
