@@ -1,0 +1,48 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 0b9bcba..0000000 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -66,7 +66,19 @@ file(GLOB_RECURSE openvic_sources CONFIGURE_DEPENDS extension/src/*.cpp)
+ list(REMOVE_ITEM openvic_sources ${CMAKE_CURRENT_SOURCE_DIR}/extension/src/openvic-extension/pch.cpp)
+ 
+-add_library(openvic SHARED ${openvic_sources})
++if(CMAKE_SYSTEM_NAME STREQUAL "Emscripten")
++    # Godot Web GDExtensions are dynamic WebAssembly side modules.
++    add_executable(openvic ${openvic_sources})
++    target_link_options(
++        openvic
++        PRIVATE
++            -sSIDE_MODULE=1
++            -sWASM_BIGINT
++            -sSUPPORT_LONGJMP=wasm
++            -pthread
++    )
++else()
++    add_library(openvic SHARED ${openvic_sources})
++endif()
+ 
+ set(game_gen_dir ${CMAKE_CURRENT_BINARY_DIR}/gen-include)
+ target_include_directories(openvic PRIVATE extension/src ${game_gen_dir})
+@@ -139,6 +151,10 @@ elseif(CMAKE_SYSTEM_NAME STREQUAL "Windows")
+     set_target_properties(openvic PROPERTIES PREFIX "")
+ elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+     set(OV_OUTPUT_NAME "openvic.linux.${GODOTCPP_TARGET}.${OV_ARCH}")
++elseif(CMAKE_SYSTEM_NAME STREQUAL "Emscripten")
++    set(OV_OUTPUT_NAME "openvic.web.${GODOTCPP_TARGET}.wasm32.threads")
++    set_target_properties(openvic PROPERTIES PREFIX "lib" SUFFIX ".wasm")
+ else()
+     message(FATAL_ERROR "Unsupported platform: ${CMAKE_SYSTEM_NAME}")
+ endif()
+diff --git a/game/bin/openvic.gdextension b/game/bin/openvic.gdextension
+index b2b7054..0000000 100644
+--- a/game/bin/openvic.gdextension
++++ b/game/bin/openvic.gdextension
+@@ -7,6 +7,8 @@ reloadable = true
+ 
+ [libraries]
+ 
++web.wasm32.single.release = "res://bin/openvic/libopenvic.web.template_release.wasm32.threads.wasm"
++web.wasm32.single.debug = "res://bin/openvic/libopenvic.web.template_debug.wasm32.threads.wasm"
+ linux.x86_64.editor = "res://bin/openvic/libopenvic.linux.editor.x86_64.so"
+ windows.x86_64.editor = "res://bin/openvic/openvic.windows.editor.x86_64.dll"
+ macos.editor = "res://bin/openvic/libopenvic.macos.editor.dylib"
