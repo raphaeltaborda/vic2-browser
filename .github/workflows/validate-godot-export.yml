@@ -1,10 +1,11 @@
 name: Validate Godot Web export
 
 on:
-  push:
-    branches: ["main"]
-    paths:
-      - ".github/workflows/validate-godot-export.yml"
+  workflow_run:
+    workflows:
+      - Build OpenVic Web port
+    types:
+      - completed
 
 permissions:
   contents: read
@@ -12,6 +13,7 @@ permissions:
 
 jobs:
   export-smoke:
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 60
 
@@ -19,13 +21,25 @@ jobs:
       - name: Checkout vic2-browser
         uses: actions/checkout@v4
 
-      - name: Download known-good wasm artifact
+      - name: Download freshly validated wasm artifact
         uses: actions/download-artifact@v4
         with:
           name: openvic-web-extension
           path: engine-artifact
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          run-id: 37581272014
+          run-id: ${{ github.event.workflow_run.id }}
+
+      - name: Assert OpenVic artifact is real WebAssembly
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          wasm = Path("engine-artifact/libopenvic.web.template_release.wasm32.nothreads.wasm")
+          magic = wasm.read_bytes()[:8]
+          print("OpenVic artifact magic:", magic)
+          if magic[:4] != b"\\x00asm":
+              raise SystemExit("Downloaded OpenVic artifact is not a WebAssembly binary.")
+          PY
 
       - name: Install native build tools
         run: |
