@@ -7,18 +7,13 @@ OPENVIC = ROOT / "vendor" / "OpenVic"
 cmake = OPENVIC / "CMakeLists.txt"
 text = cmake.read_text(encoding="utf-8")
 
-# Emscripten's CMake toolchain reports that the platform does not support
-# traditional shared libraries. godot-cpp applies a workaround inside its own
-# subdirectory, but the OpenVic GDExtension target is created in this parent
-# scope. Without the same override here, CMake silently degrades
-# add_library(openvic SHARED ...) into a static ar archive even if we give the
-# file a .wasm suffix.
-shared_marker = "# VIC2-WEB: enable real Emscripten SIDE_MODULE shared libraries"
-project_line = "project(openvic LANGUAGES CXX)\n"
-shared_block = """project(openvic LANGUAGES CXX)
-
-# VIC2-WEB: enable real Emscripten SIDE_MODULE shared libraries
-if(CMAKE_SYSTEM_NAME STREQUAL "Emscripten")
+# Emscripten's CMake toolchain disables shared libraries while project() is
+# configuring the platform. The workaround therefore has to be injected *by*
+# project(), not afterwards. This mirrors godot-cpp's own emsdkHack.cmake.
+hook = OPENVIC / "cmake" / "vic2_web_emsdk_hack.cmake"
+hook.parent.mkdir(parents=True, exist_ok=True)
+hook.write_text(
+    """if(CMAKE_SYSTEM_NAME STREQUAL "Emscripten")
     set_property(GLOBAL PROPERTY TARGET_SUPPORTS_SHARED_LIBS TRUE)
     set(CMAKE_SHARED_LIBRARY_CREATE_C_FLAGS "-sSIDE_MODULE=1")
     set(CMAKE_SHARED_LIBRARY_CREATE_CXX_FLAGS "-sSIDE_MODULE=1")
@@ -26,11 +21,20 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Emscripten")
     set(CMAKE_STRIP FALSE)
     set(CMAKE_SYSTEM_PROCESSOR "wasm32")
 endif()
-"""
-if shared_marker not in text:
+""",
+    encoding="utf-8",
+)
+
+project_line = "project(openvic LANGUAGES CXX)\n"
+project_hook = (
+    'set(CMAKE_PROJECT_openvic_INCLUDE '
+    '"${CMAKE_CURRENT_LIST_DIR}/cmake/vic2_web_emsdk_hack.cmake")\n'
+    + project_line
+)
+if "CMAKE_PROJECT_openvic_INCLUDE" not in text:
     if project_line not in text:
         raise SystemExit("OpenVic project() declaration changed upstream.")
-    text = text.replace(project_line, shared_block, 1)
+    text = text.replace(project_line, project_hook, 1)
 
 
 platform_block = '''if(APPLE)
