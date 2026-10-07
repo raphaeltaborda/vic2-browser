@@ -8,32 +8,36 @@
   <style>
     :root { color-scheme: dark; font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
     * { box-sizing: border-box; }
-    html, body { margin:0; width:100%; height:100%; background:#0d1014; color:#eef1f4; }
-    body { overflow:hidden; }
-    #canvas { display:none; width:100%; height:100%; background:#000; outline:none; }
-    #launcher { position:fixed; inset:0; overflow:auto; display:grid; place-items:center; padding:28px; background:
+    html, body { margin:0; width:100%; min-height:100%; background:#0d1014; color:#eef1f4; }
+    body { overflow:auto; }
+    #canvas { display:none; width:100vw; height:100vh; background:#000; outline:none; }
+    #launcher { min-height:100vh; display:grid; place-items:center; padding:28px; background:
       radial-gradient(circle at 30% 10%, rgba(102,121,143,.16), transparent 34%),
       linear-gradient(180deg,#11151a,#0a0d10); }
-    .card { width:min(760px,100%); padding:34px; border:1px solid #2c333b; border-radius:16px; background:rgba(19,23,28,.94); box-shadow:0 24px 80px rgba(0,0,0,.34); }
+    .card { width:min(780px,100%); padding:34px; border:1px solid #2c333b; border-radius:16px; background:rgba(19,23,28,.94); box-shadow:0 24px 80px rgba(0,0,0,.34); }
     .eyebrow { color:#9ba7b3; font-size:12px; font-weight:800; letter-spacing:.13em; }
     h1 { margin:10px 0 10px; font-size:clamp(34px,7vw,58px); letter-spacing:-.045em; }
+    h2 { margin:0 0 12px; font-size:18px; }
     p { color:#b8c0c8; line-height:1.6; }
     .notice { padding:14px 16px; border:1px solid #34404b; border-radius:10px; background:#10151a; }
-    .actions { display:flex; flex-wrap:wrap; gap:12px; margin-top:22px; }
+    .engine-box { margin:20px 0; padding:16px; border:1px solid #34404b; border-radius:10px; background:#0d1217; }
+    .status-row { display:flex; justify-content:space-between; gap:20px; padding:8px 0; border-bottom:1px solid #252d35; }
+    .status-row:last-child { border-bottom:0; }
+    .ok { color:#8ed29d; } .bad { color:#ef9a9a; } .pending { color:#e9c46a; } .muted { color:#89949f; }
+    .actions { display:flex; flex-wrap:wrap; gap:12px; margin-top:18px; }
     button, .pick { appearance:none; border:0; border-radius:9px; padding:13px 17px; font:inherit; font-weight:750; cursor:pointer; }
     button.primary, .pick { background:#eef1f4; color:#101318; }
     button.secondary { background:#222930; color:#eef1f4; border:1px solid #39434d; }
-    button:disabled { opacity:.45; cursor:not-allowed; }
+    button:disabled, .pick.disabled { opacity:.45; cursor:not-allowed; pointer-events:none; }
     input[type=file] { display:none; }
-    .checks { display:grid; gap:8px; margin-top:20px; }
+    .checks { display:grid; gap:8px; margin-top:18px; }
     .check { display:flex; justify-content:space-between; gap:16px; padding:10px 12px; border:1px solid #2b333c; border-radius:8px; background:#0e1216; }
-    .ok { color:#8ed29d; } .bad { color:#ef9a9a; } .muted { color:#89949f; }
     .confirm { display:flex; align-items:flex-start; gap:10px; margin-top:18px; color:#cbd1d7; line-height:1.45; }
     .confirm input { margin-top:4px; }
     #progress-wrap { display:none; margin-top:20px; }
     progress { width:100%; height:12px; }
     #status { margin:10px 0 0; font-size:14px; color:#c5ccd3; }
-    #log { margin-top:12px; max-height:160px; overflow:auto; white-space:pre-wrap; font:11px/1.45 ui-monospace,SFMono-Regular,Consolas,monospace; color:#909aa4; }
+    #log { margin-top:12px; max-height:190px; overflow:auto; white-space:pre-wrap; font:11px/1.45 ui-monospace,SFMono-Regular,Consolas,monospace; color:#909aa4; }
     #error { display:none; margin-top:16px; padding:14px; border:1px solid #7c3f45; background:#2a171a; color:#ffb7bd; border-radius:9px; white-space:pre-wrap; }
     .privacy { margin-top:22px; font-size:12px; color:#7e8994; }
   </style>
@@ -45,36 +49,48 @@
     <section class="card">
       <div class="eyebrow">VIC2-BROWSER · PORT NATIVO WEBASSEMBLY</div>
       <h1>Victoria II no navegador</h1>
-      <p>Este site contém somente a engine do port. Para jogar, selecione uma instalação legítima de Victoria II: Heart of Darkness no seu computador.</p>
+      <p>Esta página carrega Godot Web e a GDExtension nativa do OpenVic em WebAssembly. Nenhum executável Windows é executado ou emulado.</p>
+
+      <div class="engine-box">
+        <h2>Teste da engine</h2>
+        <div class="status-row"><span>Godot Web</span><strong id="godot-state" class="pending">inicializando…</strong></div>
+        <div class="status-row"><span>OpenVic WASM</span><strong id="openvic-state" class="pending">aguardando…</strong></div>
+        <div class="status-row"><span>Victoria II</span><strong class="muted">não necessário para este teste</strong></div>
+      </div>
 
       <div class="notice">
-        <strong>Seus arquivos não são enviados.</strong>
-        <p style="margin:6px 0 0">O navegador lê a pasta localmente e a disponibiliza diretamente ao WebAssembly. A cópia do jogo não é hospedada pelo GitHub Pages.</p>
+        <strong>Teste sem arquivos proprietários.</strong>
+        <p style="margin:6px 0 0">Se os dois primeiros indicadores ficarem verdes, o navegador carregou o runtime WebAssembly do Godot e a biblioteca do OpenVic. A cópia legítima do Victoria II só será usada para carregar os dados do jogo.</p>
       </div>
 
-      <div class="actions">
-        <label class="pick">
-          Selecionar pasta do Victoria II
-          <input id="game-files" type="file" webkitdirectory multiple>
+      <section style="margin-top:24px">
+        <h2>Próxima etapa: dados do Victoria II</h2>
+        <p>Depois que a engine estiver pronta, você já pode selecionar a pasta de uma instalação legítima para validar a estrutura. Os arquivos permanecem no navegador.</p>
+
+        <div class="actions">
+          <label id="pick-label" class="pick disabled">
+            Selecionar pasta do Victoria II
+            <input id="game-files" type="file" webkitdirectory multiple disabled>
+          </label>
+          <button id="launch" class="primary" disabled>Iniciar com os dados selecionados</button>
+        </div>
+
+        <div id="checks" class="checks">
+          <div class="check"><span>Instalação</span><span class="muted">não selecionada</span></div>
+        </div>
+
+        <label class="confirm">
+          <input id="ownership" type="checkbox">
+          <span>Confirmo que os arquivos selecionados pertencem a uma cópia legítima de Victoria II que tenho direito de usar.</span>
         </label>
-        <button id="launch" class="primary" disabled>Iniciar Victoria II</button>
-      </div>
-
-      <div id="checks" class="checks">
-        <div class="check"><span>Instalação</span><span class="muted">não selecionada</span></div>
-      </div>
-
-      <label class="confirm">
-        <input id="ownership" type="checkbox">
-        <span>Confirmo que os arquivos selecionados pertencem a uma cópia legítima de Victoria II que tenho direito de usar.</span>
-      </label>
+      </section>
 
       <div id="progress-wrap">
         <progress id="mount-progress" value="0" max="100"></progress>
         <div id="status">Preparando…</div>
-        <div id="log"></div>
       </div>
       <div id="error"></div>
+      <pre id="log"></pre>
 
       <div class="privacy">Nenhum arquivo de Victoria II é incluído no repositório, no build ou no site publicado.</div>
     </section>
@@ -88,6 +104,7 @@
     const filesInput = document.getElementById('game-files');
     const ownership = document.getElementById('ownership');
     const launchButton = document.getElementById('launch');
+    const pickLabel = document.getElementById('pick-label');
     const checks = document.getElementById('checks');
     const launcher = document.getElementById('launcher');
     const canvas = document.getElementById('canvas');
@@ -96,14 +113,78 @@
     const status = document.getElementById('status');
     const logEl = document.getElementById('log');
     const errorEl = document.getElementById('error');
+    const godotState = document.getElementById('godot-state');
+    const openvicState = document.getElementById('openvic-state');
 
     let selected = [];
     let validated = false;
+    let engineReady = false;
     let starting = false;
+    let engine = null;
 
     function log(message) {
       logEl.textContent += message + '\n';
       logEl.scrollTop = logEl.scrollHeight;
+    }
+
+    function setState(element, state, text) {
+      element.className = state;
+      element.textContent = text;
+    }
+
+    function showError(err) {
+      const message = err instanceof Error ? (err.stack || err.message) : String(err);
+      errorEl.textContent = message;
+      errorEl.style.display = 'block';
+      log('[erro] ' + message);
+    }
+
+    async function clearLegacyServiceWorker() {
+      if (!('serviceWorker' in navigator)) return;
+      const regs = await navigator.serviceWorker.getRegistrations();
+      for (const reg of regs) {
+        const url = reg.active?.scriptURL || reg.waiting?.scriptURL || reg.installing?.scriptURL || '';
+        if (url.includes('coi-serviceworker.js')) await reg.unregister();
+      }
+    }
+
+    async function initializeEngine() {
+      try {
+        await clearLegacyServiceWorker();
+
+        const missing = Engine.getMissingFeatures({ threads: GODOT_THREADS_ENABLED });
+        if (missing.length) throw new Error('Recursos ausentes no navegador: ' + missing.join(', '));
+
+        const libs = Array.isArray(GODOT_CONFIG.gdextensionLibs) ? GODOT_CONFIG.gdextensionLibs : [];
+        const openvicLib = libs.find(path => String(path).toLowerCase().includes('openvic'));
+        if (!openvicLib) {
+          throw new Error('O export Web não declarou a biblioteca OpenVic em gdextensionLibs.');
+        }
+
+        log('Godot executable: ' + GODOT_CONFIG.executable);
+        log('OpenVic side module: ' + openvicLib);
+        setState(openvicState, 'pending', 'carregando…');
+
+        engine = new Engine(Object.assign({}, GODOT_CONFIG, {
+          canvas,
+          focusCanvas: false,
+          onPrint: (...args) => { console.log(...args); log(args.join(' ')); },
+          onPrintError: (...args) => { console.error(...args); log('[Godot] ' + args.join(' ')); },
+        }));
+
+        await engine.init(GODOT_CONFIG.executable);
+
+        setState(godotState, 'ok', 'carregado');
+        setState(openvicState, 'ok', 'carregado');
+        engineReady = true;
+        filesInput.disabled = false;
+        pickLabel.classList.remove('disabled');
+        log('Smoke test concluído: Godot Web + OpenVic WASM inicializados.');
+      } catch (err) {
+        setState(godotState, 'bad', 'falha');
+        setState(openvicState, 'bad', 'falha');
+        showError(err);
+      }
     }
 
     function relativePath(file) {
@@ -126,7 +207,7 @@
       const b = document.createElement('span');
       b.className = ok ? 'ok' : 'bad';
       b.textContent = detail;
-      el.append(a,b);
+      el.append(a, b);
       checks.appendChild(el);
     }
 
@@ -134,7 +215,6 @@
       checks.replaceChildren();
       const map = fileMap();
       const required = [
-        ['v2game.exe', 'Executável original'],
         ['common/defines.lua', 'Defines'],
         ['map/definition.csv', 'Definição de províncias'],
         ['map/provinces.bmp', 'Mapa de províncias']
@@ -148,48 +228,39 @@
       }
 
       const hasLocalisation = [...map.keys()].some(p => p.startsWith('localisation/'));
+      const hasHistory = [...map.keys()].some(p => p.startsWith('history/'));
       row('Localisation', hasLocalisation, hasLocalisation ? 'OK' : 'ausente');
-      ok = ok && hasLocalisation;
+      row('History', hasHistory, hasHistory ? 'OK' : 'ausente');
+      ok = ok && hasLocalisation && hasHistory;
 
-      const bytes = selected.reduce((n,f) => n + f.size, 0);
+      const bytes = selected.reduce((n, f) => n + f.size, 0);
       row('Arquivos locais', selected.length > 0, selected.length.toLocaleString('pt-BR'));
       row('Dados a montar', selected.length > 0, (bytes / 1024 / 1024).toFixed(0) + ' MB');
 
       validated = ok;
-      launchButton.disabled = !(validated && ownership.checked);
+      launchButton.disabled = !(engineReady && validated && ownership.checked);
     }
 
     filesInput.addEventListener('change', () => {
       selected = Array.from(filesInput.files || []);
       validateSelection();
     });
+
     ownership.addEventListener('change', () => {
-      launchButton.disabled = !(validated && ownership.checked);
+      launchButton.disabled = !(engineReady && validated && ownership.checked);
     });
 
-    async function clearLegacyServiceWorker() {
-      if (!('serviceWorker' in navigator)) return;
-      const regs = await navigator.serviceWorker.getRegistrations();
-      for (const reg of regs) {
-        const url = reg.active?.scriptURL || reg.waiting?.scriptURL || reg.installing?.scriptURL || '';
-        if (url.includes('coi-serviceworker.js')) await reg.unregister();
-      }
-    }
-
-    async function copyProjectPack(engine) {
+    async function copyProjectPack() {
       const pack = GODOT_CONFIG.mainPack || (GODOT_CONFIG.executable + '.pck');
-      status.textContent = 'Carregando engine e projeto…';
-      log('Inicializando Godot Web + OpenVic WASM.');
-      await engine.init(GODOT_CONFIG.executable);
-
+      status.textContent = 'Carregando projeto OpenVic…';
       const response = await fetch(pack);
       if (!response.ok) throw new Error('Falha ao carregar o projeto Web: HTTP ' + response.status);
       engine.copyToFS('/' + pack.replace(/^\//, ''), await response.arrayBuffer());
       return pack;
     }
 
-    async function mountVictoria(engine) {
-      const total = selected.reduce((n,f) => n + f.size, 0);
+    async function mountVictoria() {
+      const total = selected.reduce((n, f) => n + f.size, 0);
       let done = 0;
       let count = 0;
 
@@ -198,8 +269,7 @@
         const rel = relativePath(file);
         if (!rel) continue;
 
-        const buffer = await file.arrayBuffer();
-        engine.copyToFS('/vic2/' + rel, buffer);
+        engine.copyToFS('/vic2/' + rel, await file.arrayBuffer());
         done += file.size;
         count++;
 
@@ -213,30 +283,20 @@
     }
 
     async function boot() {
-      if (starting || !validated || !ownership.checked) return;
+      if (starting || !engineReady || !validated || !ownership.checked) return;
       starting = true;
       launchButton.disabled = true;
       progressWrap.style.display = 'block';
       errorEl.style.display = 'none';
-      logEl.textContent = '';
       mountProgress.value = 0;
 
       try {
-        await clearLegacyServiceWorker();
-
-        const engine = new Engine(Object.assign({}, GODOT_CONFIG, {
-          canvas,
-          focusCanvas: true,
-          onPrint: (...args) => { console.log(...args); log(args.join(' ')); },
-          onPrintError: (...args) => { console.error(...args); log('[erro] ' + args.join(' ')); },
-        }));
-
-        const pack = await copyProjectPack(engine);
+        const pack = await copyProjectPack();
         mountProgress.value = 4;
-        await mountVictoria(engine);
+        await mountVictoria();
 
-        status.textContent = 'Iniciando Victoria II…';
-        log('Iniciando OpenVic em modo de compatibilidade com --base-path=/vic2.');
+        status.textContent = 'Iniciando OpenVic com os dados do Victoria II…';
+        log('Executando OpenVic com --base-path=/vic2.');
 
         await engine.start({
           canvas,
@@ -247,9 +307,7 @@
         canvas.style.display = 'block';
         canvas.focus();
       } catch (err) {
-        console.error(err);
-        errorEl.textContent = err instanceof Error ? (err.stack || err.message) : String(err);
-        errorEl.style.display = 'block';
+        showError(err);
         status.textContent = 'Falha ao iniciar.';
         launchButton.disabled = false;
         starting = false;
@@ -257,6 +315,7 @@
     }
 
     launchButton.addEventListener('click', boot);
+    initializeEngine();
   </script>
 </body>
 </html>
