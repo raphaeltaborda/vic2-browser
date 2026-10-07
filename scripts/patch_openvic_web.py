@@ -745,14 +745,6 @@ sound_effect_cpp = sim / "src/openvic-simulation/misc/SoundEffect.cpp"
 se = sound_effect_cpp.read_text(encoding="utf-8")
 if "#include <cstdio>" not in se:
     se = se.replace('#include "SoundEffect.hpp"\n', '#include "SoundEffect.hpp"\n\n#include <cstdio>\n', 1)
-sound_define_old = """	auto file_callback = [&dataloader, &file](std::string_view val) -> bool {
-		memory::string lookup = memory::fmt::format("sound/{}", val);
-		file = dataloader.lookup_file(lookup, false);
-		if (file.empty()) {
-			spdlog::warn_s("Lookup for \"{}\" failed!", lookup);
-		}
-		return true;
-	};"""
 sound_define_new = """	auto file_callback = [&dataloader, &file, sfx_identifier](std::string_view val) -> bool {
 		memory::string lookup = memory::fmt::format("sound/{}", val);
 #if defined(__EMSCRIPTEN__)
@@ -771,14 +763,26 @@ sound_define_new = """	auto file_callback = [&dataloader, &file, sfx_identifier]
 		std::fflush(stdout);
 #endif
 		if (file.empty()) {
-			spdlog::warn_s("Lookup for \"{}\" failed!", lookup);
+			spdlog::warn_s("Lookup for \\"{}\\" failed!", lookup);
 		}
 		return true;
 	};"""
 if sound_define_new not in se:
-    if sound_define_old not in se:
-        raise SystemExit("Pinned SoundEffect file callback changed; refusing blind diagnostic patch.")
-    se = se.replace(sound_define_old, sound_define_new, 1)
+    callback_start_marker = "auto file_callback = [&dataloader, &file](std::string_view val) -> bool {"
+    callback_start = se.find(callback_start_marker)
+    if callback_start == -1:
+        raise SystemExit("Could not structurally locate SoundEffect file callback.")
+    if se.find(callback_start_marker, callback_start + 1) != -1:
+        raise SystemExit("Multiple SoundEffect file callbacks found; refusing blind patch.")
+    callback_start = se.rfind("\t", 0, callback_start + 1)
+    if callback_start == -1:
+        callback_start = se.find(callback_start_marker)
+    callback_end = se.find("\n\t};", callback_start)
+    if callback_end == -1:
+        raise SystemExit("Could not locate end of SoundEffect file callback.")
+    callback_end += len("\n\t};")
+    se = se[:callback_start] + sound_define_new + se[callback_end:]
+
 sound_effect_cpp.write_text(se, encoding="utf-8")
 print("OpenVic Web sound-definition lookup diagnostics patched.")
 
