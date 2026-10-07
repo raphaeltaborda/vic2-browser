@@ -35,8 +35,8 @@ elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux")
 elseif(CMAKE_SYSTEM_NAME STREQUAL "Emscripten")
     # Godot Web GDExtensions are Emscripten SIDE_MODULEs.
     # This port deliberately starts without pthreads for maximum browser compatibility.
-    set(OV_OUTPUT_NAME "openvic.web.${GODOTCPP_TARGET}.wasm32.nothreads")
-    set_target_properties(openvic PROPERTIES PREFIX "lib" SUFFIX ".wasm")
+    set(OV_OUTPUT_NAME "libopenvic.web.${GODOTCPP_TARGET}.wasm32.nothreads")
+    set_target_properties(openvic PROPERTIES SUFFIX ".wasm")
 else()
     message(FATAL_ERROR "Unsupported platform: ${CMAKE_SYSTEM_NAME}")
 endif()'''
