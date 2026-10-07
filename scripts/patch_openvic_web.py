@@ -46,10 +46,10 @@ gtext = gdext.read_text(encoding="utf-8")
 marker = '[libraries]\n\n'
 addition = (
     '[libraries]\n\n'
-    'web.wasm32.release = "res://bin/openvic/libopenvic.web.template_release.wasm32.nothreads.wasm"\n'
-    'web.wasm32.debug = "res://bin/openvic/libopenvic.web.template_debug.wasm32.nothreads.wasm"\n'
+    'web.wasm32.single.release = "res://bin/openvic/libopenvic.web.template_release.wasm32.nothreads.wasm"\n'
+    'web.wasm32.single.debug = "res://bin/openvic/libopenvic.web.template_debug.wasm32.nothreads.wasm"\n'
 )
-if 'web.wasm32.release' not in gtext:
+if 'web.wasm32.single.release' not in gtext:
     if marker not in gtext:
         raise SystemExit("OpenVic .gdextension layout changed upstream.")
     gtext = gtext.replace(marker, addition, 1)
