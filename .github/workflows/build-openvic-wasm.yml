@@ -1,0 +1,88 @@
+name: Build clean OpenVic WASM
+
+on:
+  push:
+    branches:
+      - web-port-v2
+    paths:
+      - 'patches/openvic/**'
+      - '.github/workflows/build-openvic-wasm.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  OPENVIC_COMMIT: d3361890c62ede9464eb41af7f797e87dedf4b28
+  EMSCRIPTEN_VERSION: 4.0.20
+
+jobs:
+  wasm:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout port repository
+        uses: actions/checkout@v4
+
+      - name: Install Emscripten
+        uses: emscripten-core/setup-emsdk@v16
+        with:
+          version: ${{ env.EMSCRIPTEN_VERSION }}
+
+      - name: Verify host tools
+        run: |
+          cmake --version
+          ninja --version
+          em++ --version
+
+      - name: Fetch pinned OpenVic
+        run: |
+          git clone https://github.com/OpenVicProject/OpenVic.git vendor/OpenVic
+          git -C vendor/OpenVic checkout --detach "$OPENVIC_COMMIT"
+          git -C vendor/OpenVic submodule update --init --recursive
+
+      - name: Apply minimal Emscripten build patch
+        run: |
+          git -C vendor/OpenVic apply --check ../../patches/openvic/0001-emscripten-side-module.patch
+          git -C vendor/OpenVic apply ../../patches/openvic/0001-emscripten-side-module.patch
+          git -C vendor/OpenVic diff --check
+
+      - name: Configure wasm32 pthread build
+        run: |
+          emcmake cmake             -S vendor/OpenVic             -B build/openvic-wasm             -G Ninja             -DCMAKE_BUILD_TYPE=Release             -DGODOTCPP_TARGET=template_release             -DGODOTCPP_THREADS=ON             -DGODOTCPP_PRECISION=single             -DOPENVIC_USE_PCH=OFF             -DOPENVIC_SIM_BUILD_HEADLESS=OFF             -DOPENVIC_SIM_BUILD_TESTS=OFF             -DOPENVIC_SIM_BUILD_BENCHMARKS=OFF             -DCMAKE_CXX_FLAGS=-pthread
+
+      - name: Build OpenVic side module
+        run: cmake --build build/openvic-wasm --target openvic --parallel 4
+
+      - name: Validate WebAssembly artifact
+        run: |
+          WASM="$(find build/openvic-wasm -type f -name 'libopenvic*.wasm' -print -quit)"
+          test -n "$WASM"
+          test -s "$WASM"
+
+          python3 - "$WASM" <<'PY'
+          from pathlib import Path
+          import sys
+
+          path = Path(sys.argv[1])
+          magic = path.read_bytes()[:4]
+          print(f"artifact={path}")
+          print(f"size={path.stat().st_size}")
+          print(f"magic={magic.hex()}")
+          if magic != b"\\x00asm":
+              raise SystemExit("artifact is not a WebAssembly binary")
+          PY
+
+          mkdir -p dist
+          cp "$WASM" dist/libopenvic.web.template_release.wasm32.threads.wasm
+          printf '%s\n' "$OPENVIC_COMMIT" > dist/OPENVIC_COMMIT
+          printf '%s\n' "$EMSCRIPTEN_VERSION" > dist/EMSCRIPTEN_VERSION
+          ls -lh dist
+
+      - name: Upload validated WASM
+        uses: actions/upload-artifact@v4
+        with:
+          name: openvic-wasm-stage1
+          path: dist
+          if-no-files-found: error
