@@ -7,6 +7,32 @@ OPENVIC = ROOT / "vendor" / "OpenVic"
 cmake = OPENVIC / "CMakeLists.txt"
 text = cmake.read_text(encoding="utf-8")
 
+# Emscripten's CMake toolchain reports that the platform does not support
+# traditional shared libraries. godot-cpp applies a workaround inside its own
+# subdirectory, but the OpenVic GDExtension target is created in this parent
+# scope. Without the same override here, CMake silently degrades
+# add_library(openvic SHARED ...) into a static ar archive even if we give the
+# file a .wasm suffix.
+shared_marker = "# VIC2-WEB: enable real Emscripten SIDE_MODULE shared libraries"
+project_line = "project(openvic LANGUAGES CXX)\n"
+shared_block = """project(openvic LANGUAGES CXX)
+
+# VIC2-WEB: enable real Emscripten SIDE_MODULE shared libraries
+if(EMSCRIPTEN)
+    set_property(GLOBAL PROPERTY TARGET_SUPPORTS_SHARED_LIBS TRUE)
+    set(CMAKE_SHARED_LIBRARY_CREATE_C_FLAGS "-sSIDE_MODULE=1")
+    set(CMAKE_SHARED_LIBRARY_CREATE_CXX_FLAGS "-sSIDE_MODULE=1")
+    set(CMAKE_SHARED_LIBRARY_SUFFIX "")
+    set(CMAKE_STRIP FALSE)
+    set(CMAKE_SYSTEM_PROCESSOR "wasm32")
+endif()
+"""
+if shared_marker not in text:
+    if project_line not in text:
+        raise SystemExit("OpenVic project() declaration changed upstream.")
+    text = text.replace(project_line, shared_block, 1)
+
+
 platform_block = '''if(APPLE)
     set(OV_OUTPUT_NAME "openvic.macos.${GODOTCPP_TARGET}")
 elseif(CMAKE_SYSTEM_NAME STREQUAL "Windows")
