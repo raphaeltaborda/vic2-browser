@@ -344,7 +344,8 @@ jobs:
                   }""")
                   await page.wait_for_timeout(2500)
                   runtime_log = await page.locator("#log").inner_text()
-                  if "Usage:" not in runtime_log:
+                  console_log = "\n".join(console_lines)
+                  if "Usage:" not in runtime_log and "Usage:" not in console_log:
                       print("\n".join(console_lines[-150:]))
                       print(runtime_log[-8000:])
                       raise SystemExit("Godot callMain smoke test did not reach OpenVic --help output.")
