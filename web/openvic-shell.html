@@ -163,7 +163,21 @@
 
         log('Godot executable: ' + GODOT_CONFIG.executable);
         log('OpenVic side module: ' + openvicLib);
-        setState(openvicState, 'pending', 'carregando…');
+        setState(openvicState, 'pending', 'validando WASM…');
+
+        const openvicResponse = await fetch(openvicLib, { cache: 'force-cache' });
+        if (!openvicResponse.ok) {
+          throw new Error('Falha ao baixar OpenVic WASM: HTTP ' + openvicResponse.status);
+        }
+        const openvicBytes = await openvicResponse.arrayBuffer();
+        if (!WebAssembly.validate(openvicBytes)) {
+          throw new Error(
+            'O arquivo publicado do OpenVic não é um módulo WebAssembly válido. ' +
+            'O deploy foi bloqueado e precisa ser recompilado como Emscripten SIDE_MODULE.'
+          );
+        }
+        log('OpenVic WASM validado pelo navegador: ' + openvicBytes.byteLength + ' bytes.');
+        setState(openvicState, 'pending', 'WASM válido · vinculando…');
 
         engine = new Engine(Object.assign({}, GODOT_CONFIG, {
           canvas,
@@ -172,7 +186,12 @@
           onPrintError: (...args) => { console.error(...args); log('[Godot] ' + args.join(' ')); },
         }));
 
-        await engine.init(GODOT_CONFIG.executable);
+        const initTimeout = new Promise((_, reject) => {
+          setTimeout(() => reject(new Error(
+            'Timeout ao inicializar Godot + OpenVic. O módulo WASM é válido, mas a linkagem dinâmica não concluiu.'
+          )), 90000);
+        });
+        await Promise.race([engine.init(GODOT_CONFIG.executable), initTimeout]);
 
         setState(godotState, 'ok', 'carregado');
         setState(openvicState, 'ok', 'carregado');
