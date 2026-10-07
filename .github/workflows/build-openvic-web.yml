@@ -11,6 +11,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: openvic-wasm-main
+  cancel-in-progress: true
+
 env:
   OPENVIC_COMMIT: d3361890c62ede9464eb41af7f797e87dedf4b28
   EMSCRIPTEN_VERSION: 4.0.11
