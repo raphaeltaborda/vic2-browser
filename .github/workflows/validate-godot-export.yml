@@ -131,9 +131,28 @@ jobs:
           PY
 
       - name: Install export runtime tools
+        env:
+          DEBIAN_FRONTEND: noninteractive
         run: |
-          sudo apt-get update
-          sudo apt-get install -y python3 python3-pip libtbb-dev unzip
+          APT_OPTS=(
+            -o Acquire::Retries=5
+            -o Acquire::http::Timeout=20
+            -o Acquire::https::Timeout=20
+            -o Acquire::ForceIPv4=true
+          )
+          for attempt in 1 2 3; do
+            echo "apt update attempt $attempt/3"
+            if timeout 180s sudo apt-get "${APT_OPTS[@]}" update; then
+              break
+            fi
+            if [ "$attempt" -eq 3 ]; then
+              echo "apt update failed after 3 bounded attempts."
+              exit 1
+            fi
+            sleep $((attempt * 5))
+          done
+          timeout 300s sudo apt-get "${APT_OPTS[@]}" install -y --no-install-recommends \
+            python3 python3-pip libtbb-dev unzip
 
       - name: Fetch pinned OpenVic source
         run: |
@@ -156,6 +175,19 @@ jobs:
           grep -Fq 'corner * corner_args.half_pixel_size + corner_args.uv' "$SHADER"
           grep -Fq 'uv * map_size + vec2(0.5)' "$SHADER"
           echo "WebGL shader compatibility patch verified."
+
+          MUSIC="vendor/OpenVic/game/src/Autoload/MusicManager/MusicManager.gd"
+          grep -Fq 'var possible_indices = range(len(song_names))' "$MUSIC"
+          grep -Fq 'possible_indices.erase(title_index)' "$MUSIC"
+          grep -Fq 'possible_indices.erase(last_played)' "$MUSIC"
+          grep -Fq 'if playlist.is_empty():' "$MUSIC"
+          grep -Fq 'last_played = _selected_track' "$MUSIC"
+          if grep -Fq 'possible_indices.remove_at(title_index)' "$MUSIC" ||
+             grep -Fq 'possible_indices.remove_at(last_played)' "$MUSIC"; then
+            echo "Unsafe MusicManager positional removal survived Web patch."
+            exit 1
+          fi
+          echo "MusicManager playlist bounds patch verified."
 
       - name: Install reusable native extensions into project
         run: |

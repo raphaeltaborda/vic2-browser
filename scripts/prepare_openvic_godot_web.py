@@ -114,24 +114,119 @@ if "func _load_compatibility_mode() -> bool:" not in gs:
         gs = gs.replace(old, new, 1)
     game_start.write_text(gs, encoding="utf-8")
 
-# Fix upstream playlist index bookkeeping exposed by the compatibility music list.
-# The old code built range(song_count - 1) and then called remove_at(title_index),
-# which crashes when the title track is the last song (e.g. index 3 in a 3-element
-# candidate array). Keep song IDs as values and erase by value instead of treating
-# them as positions. Also remember the actual selected track, not playlist cursor.
+# Fix upstream playlist index bookkeeping exposed by compatibility music.
+# Keep song IDs as values, never as positions in a shortened candidate array.
+# Small playlists are handled explicitly so title-theme exclusion and last-track
+# suppression cannot produce an empty array or an out-of-range remove_at().
 music_manager = GAME / "src/Autoload/MusicManager/MusicManager.gd"
 mm = music_manager.read_text(encoding="utf-8")
-music_replacements = {
-    "\tlast_played = playlist_index\n": "\tlast_played = _selected_track\n",
-    "\tvar possible_indices = range(len(song_names) - 1)\n": "\tvar possible_indices = range(len(song_names))\n",
-    "\tpossible_indices.remove_at(title_index)\n": "\tif title_index != -1:\n\t\tpossible_indices.erase(title_index)\n",
-    "\t\tpossible_indices.remove_at(last_played)\n": "\t\tpossible_indices.erase(last_played)\n",
-}
-for old, new in music_replacements.items():
-    if old in mm:
-        mm = mm.replace(old, new, 1)
-    elif new not in mm:
-        raise SystemExit(f"MusicManager playlist anchor changed: {old!r}")
+
+select_old = """func select_next_song() -> void:
+	#_selected_track = (_selected_track + 1) % len(_available_songs)
+	if playlist_index >= preferred_playlist_len or playlist_index >= len(playlist):
+		generate_playlist()
+		playlist_index = 0
+	_selected_track = playlist[playlist_index]
+	playlist_index += 1
+	last_played = playlist_index
+	_audio_stream_paused = false
+	start_current_song()
+"""
+select_new = """func select_next_song() -> void:
+	#_selected_track = (_selected_track + 1) % len(_available_songs)
+	if playlist_index >= preferred_playlist_len or playlist_index >= len(playlist):
+		generate_playlist()
+		playlist_index = 0
+	if playlist.is_empty():
+		return
+	_selected_track = playlist[playlist_index]
+	playlist_index += 1
+	last_played = _selected_track
+	_audio_stream_paused = false
+	start_current_song()
+"""
+if select_new not in mm:
+    if select_old not in mm:
+        raise SystemExit("Pinned MusicManager select_next_song changed; refusing blind patch.")
+    mm = mm.replace(select_old, select_new, 1)
+
+playlist_old = """func generate_playlist() -> void:
+	var song_names = MusicManager.get_all_song_paths()
+	var possible_indices = range(len(song_names) - 1)
+
+	var title_index = song_names.find(SoundSingleton.title_theme)
+	possible_indices.remove_at(title_index)
+
+	var actual_playlist_len = min(preferred_playlist_len, len(possible_indices))
+
+	#if the playlist size is too large or small, make it the same size as what we
+	#need to support
+	if len(playlist) != actual_playlist_len:
+		playlist.resize(actual_playlist_len)
+		playlist.fill(0)
+
+	#The song we just played can be in the playlist, just not the first one
+	if last_played != -1:
+		possible_indices.remove_at(last_played)
+
+	#essentially shuffle-bag randomness, picking from a list of song indices
+	for i in range(actual_playlist_len):
+		var ind = randi_range(0, len(possible_indices) - 1)
+		#add back the last song we just played as an option
+		if i == 2:
+			possible_indices.append(last_played)
+
+		playlist[i] = possible_indices[ind]
+		possible_indices.remove_at(ind)
+"""
+playlist_new = """func generate_playlist() -> void:
+	var song_names = MusicManager.get_all_song_paths()
+	var possible_indices = range(len(song_names))
+
+	var title_index = song_names.find(SoundSingleton.title_theme)
+	if title_index != -1:
+		possible_indices.erase(title_index)
+
+	if possible_indices.is_empty():
+		playlist.clear()
+		playlist_index = 0
+		return
+
+	# Hold the previously played track out of the first choices when there is
+	# another song available. erase() removes the song ID by value.
+	var held_last_played: int = -1
+	if last_played != -1 and possible_indices.size() > 1 and possible_indices.has(last_played):
+		possible_indices.erase(last_played)
+		held_last_played = last_played
+
+	var actual_playlist_len = min(
+		preferred_playlist_len,
+		len(possible_indices) + (1 if held_last_played != -1 else 0)
+	)
+
+	if len(playlist) != actual_playlist_len:
+		playlist.resize(actual_playlist_len)
+		playlist.fill(0)
+
+	# Reinsert the previous track no earlier than the third slot when possible.
+	# With a two-song candidate set it is reinserted in the second slot instead.
+	var reinsert_at = min(2, actual_playlist_len - 1) if held_last_played != -1 else -1
+	for i in range(actual_playlist_len):
+		if i == reinsert_at:
+			possible_indices.append(held_last_played)
+		if possible_indices.is_empty():
+			playlist.resize(i)
+			break
+
+		var ind = randi_range(0, len(possible_indices) - 1)
+		playlist[i] = possible_indices[ind]
+		possible_indices.remove_at(ind)
+"""
+if playlist_new not in mm:
+    if playlist_old not in mm:
+        raise SystemExit("Pinned MusicManager generate_playlist changed; refusing blind patch.")
+    mm = mm.replace(playlist_old, playlist_new, 1)
+
 music_manager.write_text(mm, encoding="utf-8")
 
 

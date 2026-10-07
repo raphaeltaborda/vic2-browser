@@ -98,3 +98,27 @@ test('failed engine start requires reload and cannot be retried on damaged insta
   await vm.runInContext('boot()',env.context);
   assert.equal(env.starts,1);
 });
+
+
+test('port patch keeps compatibility playlist indices bounded', () => {
+  const prepare = fs.readFileSync('scripts/prepare_openvic_godot_web.py', 'utf8');
+  assert.match(prepare, /range\(len\(song_names\)\)/);
+  assert.match(prepare, /possible_indices\.erase\(title_index\)/);
+  assert.match(prepare, /possible_indices\.erase\(last_played\)/);
+  assert.match(prepare, /if playlist\.is_empty\(\):/);
+  assert.match(prepare, /last_played = _selected_track/);
+  assert.doesNotMatch(prepare, /possible_indices\.remove_at\(title_index\)/);
+  assert.doesNotMatch(prepare, /possible_indices\.remove_at\(last_played\)/);
+});
+
+test('raw sound trace distinguishes file IO from grammar parsing', () => {
+  const portPatch = fs.readFileSync('scripts/patch_openvic_web.py', 'utf8');
+  for (const marker of [
+    'sound.sfx: reading file',
+    'sound.sfx: file read',
+    'sound.sfx: grammar parse begin',
+    'sound.sfx: grammar parse done; ok=%d',
+  ]) {
+    assert.ok(portPatch.includes(marker), 'missing diagnostic marker: ' + marker);
+  }
+});

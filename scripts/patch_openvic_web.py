@@ -515,6 +515,26 @@ if read_old not in dl:
     raise SystemExit("Pinned parser file read changed; refusing blind patch.")
 dl = dl.replace(read_old, read_new, 1)
 
+parse_old = """	if (!parse_func(parser)) {
+		spdlog::error_s("Parse function returned false for {}!", path);
+	}"""
+parse_new = """#if defined(__EMSCRIPTEN__)
+	if (trace_sound) { std::puts("[WebLoadRaw] sound.sfx: grammar parse begin"); std::fflush(stdout); }
+#endif
+	const bool parse_ok = parse_func(parser);
+#if defined(__EMSCRIPTEN__)
+	if (trace_sound) {
+		std::printf("[WebLoadRaw] sound.sfx: grammar parse done; ok=%d\\n", parse_ok ? 1 : 0);
+		std::fflush(stdout);
+	}
+#endif
+	if (!parse_ok) {
+		spdlog::error_s("Parse function returned false for {}!", path);
+	}"""
+if parse_old not in dl:
+    raise SystemExit("Pinned parser grammar call changed; refusing blind patch.")
+dl = dl.replace(parse_old, parse_new, 1)
+
 dataloader_cpp.write_text(dl, encoding="utf-8")
 print("Raw Web definition-loader diagnostics patched.")
 
