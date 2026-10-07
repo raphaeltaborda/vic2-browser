@@ -1,0 +1,40 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+Subject: [PATCH] Build OpenVic as an Emscripten side module
+
+Keep desktop targets unchanged. Emscripten does not model a Godot Web
+GDExtension as a conventional native shared library, so build the extension
+as a WebAssembly executable target linked with SIDE_MODULE=1.
+
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -56,7 +56,23 @@ file(GLOB_RECURSE openvic_sources CONFIGURE_DEPENDS extension/src/*.cpp)
+ list(REMOVE_ITEM openvic_sources ${CMAKE_CURRENT_SOURCE_DIR}/extension/src/openvic-extension/pch.cpp)
+ 
+-add_library(openvic SHARED ${openvic_sources})
++if(CMAKE_SYSTEM_NAME STREQUAL "Emscripten")
++    add_executable(openvic ${openvic_sources})
++    target_link_options(
++        openvic
++        PRIVATE
++            -sSIDE_MODULE=1
++            -sWASM_BIGINT
++            -sSUPPORT_LONGJMP=wasm
++            -pthread
++    )
++else()
++    add_library(openvic SHARED ${openvic_sources})
++endif()
+ 
+ set(game_gen_dir ${CMAKE_CURRENT_BINARY_DIR}/gen-include)
+ target_include_directories(openvic PRIVATE extension/src ${game_gen_dir})
+@@ -123,6 +139,10 @@ elseif(CMAKE_SYSTEM_NAME STREQUAL "Windows")
+     set_target_properties(openvic PROPERTIES PREFIX "")
+ elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+     set(OV_OUTPUT_NAME "openvic.linux.${GODOTCPP_TARGET}.${OV_ARCH}")
++elseif(CMAKE_SYSTEM_NAME STREQUAL "Emscripten")
++    set(OV_OUTPUT_NAME "openvic.web.${GODOTCPP_TARGET}.wasm32.threads")
++    set_target_properties(openvic PROPERTIES PREFIX "lib" SUFFIX ".wasm")
+ else()
+     message(FATAL_ERROR "Unsupported platform: ${CMAKE_SYSTEM_NAME}")
+ endif()
