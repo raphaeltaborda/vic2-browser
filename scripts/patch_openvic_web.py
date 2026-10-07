@@ -546,58 +546,6 @@ if "#include <dirent.h>" not in dl:
         1,
     )
 
-lookup_old = """fs::path Dataloader::lookup_file(std::string_view path, bool print_error) const {
-	const fs::path filepath { ensure_forward_slash_path(path) };
-
-	const std::string_view filename = get_filename(path);
-	for (fs::path const& root : roots) {
-		const fs::path composed = root / filepath;
-		if (fs::is_regular_file(composed)) {
-			if (root == roots.back()) {
-				bool ignore = false;
-				for (fs::path const& replace_path : replace_paths) {
-					if (filepath.string().starts_with(replace_path.string())) {
-						ignore = true;
-						break;
-					}
-				}
-				if (!ignore) {
-					return composed;
-				}
-			} else {
-				return composed;
-			}
-		}
-		std::error_code ec;
-		for (fs::directory_entry const& entry : fs::directory_iterator { composed.parent_path(), ec }) {
-			if (entry.is_regular_file()) {
-				const fs::path file = entry;
-				if (ascii_equal_case_insensitive(file.filename().string(), filename)) {
-					if (root == roots.back()) {
-						bool ignore = false;
-						for (fs::path const& replace_path : replace_paths) {
-							if (filepath.string().starts_with(replace_path.string())) {
-								ignore = true;
-								break;
-							}
-						}
-						if (!ignore) {
-							return file;
-						}
-					} else {
-						return file;
-					}
-				}
-			}
-		}
-	}
-
-	if (print_error) {
-		spdlog::error_s("Lookup for \"{}\" failed!", path);
-	}
-	return {};
-}"""
-
 lookup_new = """fs::path Dataloader::lookup_file(std::string_view path, bool print_error) const {
 	const fs::path filepath { ensure_forward_slash_path(path) };
 
@@ -622,25 +570,32 @@ lookup_new = """fs::path Dataloader::lookup_file(std::string_view path, bool pri
 		}
 
 #if defined(__EMSCRIPTEN__)
-		const std::string parent = composed.parent_path().string();
+		const fs::path parent_path = composed.parent_path();
+		const std::string parent = parent_path.string();
 		DIR* directory = ::opendir(parent.c_str());
 		if (directory != nullptr) {
 			if (path.starts_with("sound/")) {
 				std::printf("[WebLoadRaw] sound lookup fallback: %.*s\\n", static_cast<int>(path.size()), path.data());
 				std::fflush(stdout);
 			}
+
+			fs::path matched {};
 			while (dirent* entry = ::readdir(directory)) {
 				const std::string_view entry_name { entry->d_name };
 				if (!ascii_equal_case_insensitive(entry_name, filename)) {
 					continue;
 				}
-				const fs::path file = composed.parent_path() / entry->d_name;
-				if (!fs::is_regular_file(file)) {
-					continue;
+				const fs::path candidate = parent_path / entry->d_name;
+				if (fs::is_regular_file(candidate)) {
+					matched = candidate;
+					break;
 				}
-				::closedir(directory);
+			}
+			::closedir(directory);
+
+			if (!matched.empty()) {
 				if (path.starts_with("sound/")) {
-					std::printf("[WebLoadRaw] sound lookup fallback matched: %s\\n", file.string().c_str());
+					std::printf("[WebLoadRaw] sound lookup fallback matched: %s\\n", matched.string().c_str());
 					std::fflush(stdout);
 				}
 				if (root == roots.back()) {
@@ -652,14 +607,12 @@ lookup_new = """fs::path Dataloader::lookup_file(std::string_view path, bool pri
 						}
 					}
 					if (!ignore) {
-						return file;
+						return matched;
 					}
 				} else {
-					return file;
+					return matched;
 				}
-				break;
 			}
-			::closedir(directory);
 		}
 #else
 		std::error_code ec;
@@ -688,15 +641,21 @@ lookup_new = """fs::path Dataloader::lookup_file(std::string_view path, bool pri
 	}
 
 	if (print_error) {
-		spdlog::error_s("Lookup for \"{}\" failed!", path);
+		spdlog::error_s("Lookup for \\"{}\\" failed!", path);
 	}
 	return {};
 }"""
 
 if lookup_new not in dl:
-    if lookup_old not in dl:
-        raise SystemExit("Pinned Dataloader::lookup_file changed; refusing blind Web fallback patch.")
-    dl = dl.replace(lookup_old, lookup_new, 1)
+    lookup_start_marker = "fs::path Dataloader::lookup_file(std::string_view path, bool print_error) const {"
+    lookup_end_marker = "\nfs::path Dataloader::lookup_image_file(std::string_view path) const {"
+    lookup_start = dl.find(lookup_start_marker)
+    lookup_end = dl.find(lookup_end_marker, lookup_start)
+    if lookup_start == -1 or lookup_end == -1:
+        raise SystemExit("Could not structurally locate pinned Dataloader::lookup_file.")
+    if dl.find(lookup_start_marker, lookup_start + 1) != -1:
+        raise SystemExit("Multiple Dataloader::lookup_file definitions found; refusing blind patch.")
+    dl = dl[:lookup_start] + lookup_new + dl[lookup_end:]
 
 dataloader_cpp.write_text(dl, encoding="utf-8")
 print("Raw Web definition-loader diagnostics patched.")
