@@ -51,6 +51,22 @@ jobs:
         run: |
           emcmake cmake             -S vendor/OpenVic             -B build/openvic-web             -G Ninja             -DCMAKE_BUILD_TYPE=Release             -DGODOTCPP_TARGET=template_release             -DGODOTCPP_THREADS=OFF             -DGODOTCPP_PRECISION=single             -DOPENVIC_USE_PCH=OFF             -DOPENVIC_SIM_BUILD_HEADLESS=OFF             -DOPENVIC_SIM_BUILD_TESTS=OFF             -DOPENVIC_SIM_BUILD_BENCHMARKS=OFF
 
+      - name: Patch foonathan-memory for current libc++ ABI namespace
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          root = Path("build/openvic-web/_deps/memory-src")
+          changed = 0
+          for path in root.rglob("*.hpp"):
+              text = path.read_text(encoding="utf-8")
+              if "std::__1::" in text:
+                  path.write_text(text.replace("std::__1::", "std::_LIBCPP_ABI_NAMESPACE::"), encoding="utf-8")
+                  changed += 1
+          print(f"Patched {changed} foonathan-memory header(s)")
+          if changed == 0:
+              raise SystemExit("Expected libc++ __1 references were not found.")
+          PY
+
       - name: Build OpenVic WebAssembly extension
         run: |
           cmake --build build/openvic-web --target openvic --parallel 2
