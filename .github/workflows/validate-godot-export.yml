@@ -23,6 +23,10 @@ permissions:
   contents: read
   actions: read
 
+concurrency:
+  group: validate-godot-web-main
+  cancel-in-progress: true
+
 jobs:
   export-smoke:
     if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
