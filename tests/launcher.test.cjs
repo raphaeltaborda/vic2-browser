@@ -102,13 +102,19 @@ test('failed engine start requires reload and cannot be retried on damaged insta
 
 test('port patch keeps compatibility playlist indices bounded', () => {
   const prepare = fs.readFileSync('scripts/prepare_openvic_godot_web.py', 'utf8');
-  assert.match(prepare, /range\(len\(song_names\)\)/);
-  assert.match(prepare, /possible_indices\.erase\(title_index\)/);
-  assert.match(prepare, /possible_indices\.erase\(last_played\)/);
-  assert.match(prepare, /if playlist\.is_empty\(\):/);
-  assert.match(prepare, /last_played = _selected_track/);
-  assert.doesNotMatch(prepare, /possible_indices\.remove_at\(title_index\)/);
-  assert.doesNotMatch(prepare, /possible_indices\.remove_at\(last_played\)/);
+  const match = prepare.match(/playlist_new = """([\s\S]*?)"""/);
+  assert.ok(match, 'playlist_new patch body not found');
+  const generated = match[1];
+  assert.match(generated, /range\(len\(song_names\)\)/);
+  assert.match(generated, /possible_indices\.erase\(title_index\)/);
+  assert.match(generated, /possible_indices\.erase\(last_played\)/);
+  assert.match(generated, /if playlist\.is_empty\(\):/);
+  assert.doesNotMatch(generated, /possible_indices\.remove_at\(title_index\)/);
+  assert.doesNotMatch(generated, /possible_indices\.remove_at\(last_played\)/);
+
+  const select = prepare.match(/select_new = """([\s\S]*?)"""/);
+  assert.ok(select, 'select_new patch body not found');
+  assert.match(select[1], /last_played = _selected_track/);
 });
 
 test('raw sound trace distinguishes file IO from grammar parsing', () => {
