@@ -5,6 +5,7 @@ const exePanel = document.getElementById("exe-panel");
 const exeInfo = document.getElementById("exe-info");
 const nextPanel = document.getElementById("next-panel");
 const nextInfo = document.getElementById("next-info");
+const runVic2Button = document.getElementById("run-vic2-button");
 
 function normalizePath(file) {
     return file.webkitRelativePath.replaceAll("\\", "/");
@@ -86,6 +87,7 @@ folderInput.addEventListener("change", async () => {
     resultsPanel.classList.remove("hidden");
     exePanel.classList.add("hidden");
     nextPanel.classList.add("hidden");
+    runVic2Button.classList.add("hidden");
 
     if (!files.length) {
         addResult("Pasta", false, "nenhum arquivo encontrado");
@@ -161,7 +163,8 @@ folderInput.addEventListener("change", async () => {
 
     if (coreReady) {
         nextInfo.textContent =
-            "A instalação parece completa. Na próxima etapa vamos montar um pacote de teste para o BoxedWine e tentar iniciar diretamente o v2game.exe, sem usar o launcher da Steam.";
+            "A instalação parece completa. Podemos montar um pacote local em memória e tentar iniciar diretamente o v2game.exe pelo BoxedWine.";
+        runVic2Button.classList.remove("hidden");
     } else {
         nextInfo.textContent =
             "A pasta selecionada parece incompleta ou não é a raiz da instalação do Victoria II. Verifique os itens marcados como ausentes.";
