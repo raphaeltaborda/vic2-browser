@@ -17,7 +17,7 @@ concurrency:
 
 env:
   OPENVIC_COMMIT: d3361890c62ede9464eb41af7f797e87dedf4b28
-  EMSCRIPTEN_VERSION: 4.0.11
+  EMSCRIPTEN_VERSION: 4.0.20
   CCACHE_DIR: ${{ github.workspace }}/.ccache
   CCACHE_MAXSIZE: 2G
   CCACHE_COMPRESS: "true"

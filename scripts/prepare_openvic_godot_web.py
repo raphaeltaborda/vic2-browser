@@ -93,6 +93,25 @@ if '[WebLoad] setting roots' not in gs:
     )
 game_start.write_text(gs, encoding="utf-8")
 
+
+# Godot's GL Compatibility/WebGL2 backend does not support GLSL fma() on
+# low-end platforms. These two calls are ordinary affine operations, so
+# replacing them with multiply+add preserves the intended calculation.
+terrain_shader = GAME / "src/Systems/Session/Map/TerrainMap.gdshader"
+shader = terrain_shader.read_text(encoding="utf-8")
+shader_replacements = {
+    "fma(corner, corner_args.half_pixel_size, corner_args.uv)":
+        "(corner * corner_args.half_pixel_size + corner_args.uv)",
+    "fma(uv, map_size, vec2(0.5))":
+        "(uv * map_size + vec2(0.5))",
+}
+for old, new in shader_replacements.items():
+    if old in shader:
+        shader = shader.replace(old, new)
+    elif new not in shader:
+        raise SystemExit(f"TerrainMap.gdshader compatibility anchor changed: {old}")
+terrain_shader.write_text(shader, encoding="utf-8")
+
 # Browser canvas sizing/fullscreen are controlled by the HTML shell. Avoid
 # desktop-only monitor/fullscreen/VSync operations during startup.
 settings = GAME / "src/Autoload/Settings/GameSettings.gd"
