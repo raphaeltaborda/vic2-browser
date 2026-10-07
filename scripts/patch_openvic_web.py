@@ -226,6 +226,111 @@ if segment_old not in point_text:
 point_hpp.write_text(point_text.replace(segment_old, segment_new, 1), encoding="utf-8")
 print("OpenVic hashing patched for 32-bit wasm size_t.")
 
+# Base-game Web startup does not need to scan Victoria II's mod descriptors when
+# no mods were requested. On browser MEMFS that directory walk/parser is pure
+# overhead and can dominate startup. Keep the normal upstream path for future
+# mod-enabled launches.
+game_singleton_cpp = OPENVIC / "extension" / "src" / "openvic-extension" / "singletons" / "GameSingleton.cpp"
+gs_cpp = game_singleton_cpp.read_text(encoding="utf-8")
+compat_old = """godot::Error GameSingleton::load_defines_compatibility_mode(PackedStringArray const& mods) {
+\tgodot::Error err = OK;
+\tauto add_message = std::bind_front(&LoadLocalisation::add_message, LoadLocalisation::get_singleton());
+
+\tERR_FAIL_COND_V_MSG(!game_manager.load_mod_descriptors(), FAILED, "Failed to load mod descriptors!");
+
+\tmemory::vector<memory::string> std_mods;
+\tstd_mods.reserve(mods.size());
+\tfor (String const& mod : mods) {
+\t\tstd_mods.emplace_back(convert_to<std::string>(mod));
+\t}
+
+\tERR_FAIL_COND_V_MSG(!game_manager.load_mods(std_mods), FAILED, "Loading mods failed.");
+
+\tif (!game_manager.load_definitions(add_message)) {
+\t\tUtilityFunctions::push_error("Failed to load defines!");
+\t\terr = FAILED;
+\t}
+
+\tif (_load_terrain_variants() != OK) {
+\t\tUtilityFunctions::push_error("Failed to load terrain variants!");
+\t\terr = FAILED;
+\t}
+\tif (_load_flag_sheet() != OK) {
+\t\tUtilityFunctions::push_error("Failed to load flag sheet!");
+\t\terr = FAILED;
+\t}
+\tif (_load_map_images() != OK) {
+\t\tUtilityFunctions::push_error("Failed to load map images!");
+\t\terr = FAILED;
+\t}
+
+\tAssetManager* asset_manager = AssetManager::get_singleton();
+\tif (asset_manager == nullptr || asset_manager->preload_textures() != OK) {
+\t\tUtilityFunctions::push_error("Failed to preload assets!");
+\t\terr = FAILED;
+\t}
+
+\treturn err;
+}"""
+compat_new = """godot::Error GameSingleton::load_defines_compatibility_mode(PackedStringArray const& mods) {
+\tgodot::Error err = OK;
+\tauto add_message = std::bind_front(&LoadLocalisation::add_message, LoadLocalisation::get_singleton());
+
+\tif (!mods.is_empty()) {
+\t\tUtilityFunctions::print("[WebLoad] scanning mod descriptors");
+\t\tERR_FAIL_COND_V_MSG(!game_manager.load_mod_descriptors(), FAILED, "Failed to load mod descriptors!");
+
+\t\tmemory::vector<memory::string> std_mods;
+\t\tstd_mods.reserve(mods.size());
+\t\tfor (String const& mod : mods) {
+\t\t\tstd_mods.emplace_back(convert_to<std::string>(mod));
+\t\t}
+
+\t\tUtilityFunctions::print("[WebLoad] resolving requested mods");
+\t\tERR_FAIL_COND_V_MSG(!game_manager.load_mods(std_mods), FAILED, "Loading mods failed.");
+\t} else {
+\t\tUtilityFunctions::print("[WebLoad] vanilla mode; skipping mod descriptor scan");
+\t}
+
+\tUtilityFunctions::print("[WebLoad] loading definitions");
+\tif (!game_manager.load_definitions(add_message)) {
+\t\tUtilityFunctions::push_error("Failed to load defines!");
+\t\terr = FAILED;
+\t}
+
+\tUtilityFunctions::print("[WebLoad] loading terrain variants");
+\tif (_load_terrain_variants() != OK) {
+\t\tUtilityFunctions::push_error("Failed to load terrain variants!");
+\t\terr = FAILED;
+\t}
+\tUtilityFunctions::print("[WebLoad] building flag sheet");
+\tif (_load_flag_sheet() != OK) {
+\t\tUtilityFunctions::push_error("Failed to load flag sheet!");
+\t\terr = FAILED;
+\t}
+\tUtilityFunctions::print("[WebLoad] building map images");
+\tif (_load_map_images() != OK) {
+\t\tUtilityFunctions::push_error("Failed to load map images!");
+\t\terr = FAILED;
+\t}
+
+\tUtilityFunctions::print("[WebLoad] preloading textures");
+\tAssetManager* asset_manager = AssetManager::get_singleton();
+\tif (asset_manager == nullptr || asset_manager->preload_textures() != OK) {
+\t\tUtilityFunctions::push_error("Failed to preload assets!");
+\t\terr = FAILED;
+\t}
+
+\tUtilityFunctions::print("[WebLoad] compatibility definitions complete");
+\treturn err;
+}"""
+if compat_new not in gs_cpp:
+    if compat_old not in gs_cpp:
+        raise SystemExit("Pinned GameSingleton compatibility loader changed; refusing blind patch.")
+    gs_cpp = gs_cpp.replace(compat_old, compat_new, 1)
+game_singleton_cpp.write_text(gs_cpp, encoding="utf-8")
+print("OpenVic base-game Web loader patched to skip unused mod scan.")
+
 ecs_cpp = sim / "src/openvic-simulation/core/ecs/EcsThreadPool.cpp"
 ecs_text = ecs_cpp.read_text(encoding="utf-8")
 ecs_ctor = """EcsThreadPool::EcsThreadPool(uint32_t worker_count) {
