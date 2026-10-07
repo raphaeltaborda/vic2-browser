@@ -94,6 +94,100 @@ print("OpenVic patched for wasm32/nothreads.")
 
 sim = OPENVIC / "extension" / "deps" / "openvic-simulation"
 
+# OpenVic's pinned hash helpers assume a 64-bit size_t. wasm32 uses a 32-bit
+# size_t, where shifts by 32/33 are invalid and the 64-bit FNV constants are
+# truncated. Keep the desktop behavior unchanged and select proper 32-bit
+# mixing when compiling the same source for WebAssembly.
+hash_hpp = sim / "src/openvic-simulation/core/Hash.hpp"
+hash_text = hash_hpp.read_text(encoding="utf-8")
+hash_old = """\tinline constexpr std::size_t hash_murmur3(std::size_t key, std::size_t seed = MURMUR3_SEED) {
+\t\tkey ^= seed;
+\t\tkey ^= key >> 33;
+\t\tkey *= 0xff51afd7ed558ccd;
+\t\tkey ^= key >> 33;
+\t\tkey *= 0xc4ceb9fe1a85ec53;
+\t\tkey ^= key >> 33;
+\t\treturn key;
+\t}"""
+hash_new = """\tinline constexpr std::size_t hash_murmur3(std::size_t key, std::size_t seed = MURMUR3_SEED) {
+\t\tkey ^= seed;
+\t\tif constexpr (sizeof(std::size_t) >= 8) {
+\t\t\tkey ^= key >> 33;
+\t\t\tkey *= static_cast<std::size_t>(0xff51afd7ed558ccdULL);
+\t\t\tkey ^= key >> 33;
+\t\t\tkey *= static_cast<std::size_t>(0xc4ceb9fe1a85ec53ULL);
+\t\t\tkey ^= key >> 33;
+\t\t} else {
+\t\t\t// MurmurHash3 fmix32 for wasm32/other 32-bit size_t targets.
+\t\t\tkey ^= key >> 16;
+\t\t\tkey *= static_cast<std::size_t>(0x85ebca6bU);
+\t\t\tkey ^= key >> 13;
+\t\t\tkey *= static_cast<std::size_t>(0xc2b2ae35U);
+\t\t\tkey ^= key >> 16;
+\t\t}
+\t\treturn key;
+\t}"""
+if hash_old not in hash_text:
+    raise SystemExit("Pinned Hash.hpp Murmur finalizer changed; refusing blind patch.")
+hash_hpp.write_text(hash_text.replace(hash_old, hash_new, 1), encoding="utf-8")
+
+ordered_hpp = sim / "src/openvic-simulation/types/OrderedContainers.hpp"
+ordered_text = ordered_hpp.read_text(encoding="utf-8")
+fnv_old = """\t\t[[nodiscard]] static constexpr size_t _hash_bytes_case_insensitive(char const* first, size_t count) {
+\t\t\tconstexpr size_t _offset_basis = 14695981039346656037ULL;
+\t\t\tconstexpr size_t _prime = 1099511628211ULL;
+\t\t\tsize_t hash = _offset_basis;
+\t\t\tfor (size_t i = 0; i < count; ++i) {
+\t\t\t\thash ^= static_cast<size_t>(std::tolower(static_cast<unsigned char>(first[i])));
+\t\t\t\thash *= _prime;
+\t\t\t}
+\t\t\treturn hash;
+\t\t}"""
+fnv_new = """\t\t[[nodiscard]] static constexpr size_t _hash_bytes_case_insensitive(char const* first, size_t count) {
+\t\t\tsize_t hash;
+\t\t\tsize_t prime;
+\t\t\tif constexpr (sizeof(size_t) >= 8) {
+\t\t\t\thash = static_cast<size_t>(14695981039346656037ULL);
+\t\t\t\tprime = static_cast<size_t>(1099511628211ULL);
+\t\t\t} else {
+\t\t\t\thash = static_cast<size_t>(2166136261U);
+\t\t\t\tprime = static_cast<size_t>(16777619U);
+\t\t\t}
+\t\t\tfor (size_t i = 0; i < count; ++i) {
+\t\t\t\thash ^= static_cast<size_t>(std::tolower(static_cast<unsigned char>(first[i])));
+\t\t\t\thash *= prime;
+\t\t\t}
+\t\t\treturn hash;
+\t\t}"""
+if fnv_old not in ordered_text:
+    raise SystemExit("Pinned OrderedContainers.hpp FNV hash changed; refusing blind patch.")
+ordered_hpp.write_text(ordered_text.replace(fnv_old, fnv_new, 1), encoding="utf-8")
+
+point_hpp = sim / "src/openvic-simulation/pathfinding/PointMap.hpp"
+point_text = point_hpp.read_text(encoding="utf-8")
+segment_old = """\t\tstruct SegmentHash {
+\t\t\tinline constexpr std::size_t operator()(Segment const& segment) const {
+\t\t\t\treturn hash_murmur3(hash_murmur3(segment.key.first) << 32) |
+\t\t\t\t\thash_murmur3(segment.key.second);
+\t\t\t}
+\t\t};"""
+segment_new = """\t\tstruct SegmentHash {
+\t\t\tinline constexpr std::size_t operator()(Segment const& segment) const {
+\t\t\t\tif constexpr (sizeof(std::size_t) >= 8) {
+\t\t\t\t\treturn hash_murmur3(hash_murmur3(static_cast<std::size_t>(segment.key.first)) << 32) |
+\t\t\t\t\t\thash_murmur3(static_cast<std::size_t>(segment.key.second));
+\t\t\t\t} else {
+\t\t\t\t\tstd::size_t seed = std::hash<points_key_type> {}(segment.key.first);
+\t\t\t\t\thash_combine(seed, segment.key.second);
+\t\t\t\t\treturn hash_murmur3(seed);
+\t\t\t\t}
+\t\t\t}
+\t\t};"""
+if segment_old not in point_text:
+    raise SystemExit("Pinned PointMap.hpp SegmentHash changed; refusing blind patch.")
+point_hpp.write_text(point_text.replace(segment_old, segment_new, 1), encoding="utf-8")
+print("OpenVic hashing patched for 32-bit wasm size_t.")
+
 ecs_cpp = sim / "src/openvic-simulation/core/ecs/EcsThreadPool.cpp"
 ecs_text = ecs_cpp.read_text(encoding="utf-8")
 ecs_ctor = """EcsThreadPool::EcsThreadPool(uint32_t worker_count) {
