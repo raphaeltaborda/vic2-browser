@@ -135,29 +135,66 @@ jobs:
 
       - name: Fetch official Web GDExtension single-thread template
         run: |
-          python3 -m pip install --user --break-system-packages remotezip
-          python3 - <<'PY'
-          from pathlib import Path
-          from remotezip import RemoteZip
+          TEMPLATE_ROOT="$HOME/.local/share/godot/export_templates/4.7.2.stable"
+          mkdir -p "$TEMPLATE_ROOT"
 
-          url = "https://github.com/godotengine/godot/releases/download/4.7.2-stable/Godot_v4.7.2-stable_export_templates.tpz"
-          out = Path.home() / ".local/share/godot/export_templates/4.7.2.stable"
-          out.mkdir(parents=True, exist_ok=True)
+          curl -L --fail --retry 3 \
+            https://github.com/godotengine/godot/releases/download/4.7.2-stable/Godot_v4.7.2-stable_export_templates.tpz \
+            -o /tmp/godot-export-templates.tpz
 
-          with RemoteZip(url) as archive:
-              matches = [
-                  name for name in archive.namelist()
-                  if name.endswith("/web_dlink_nothreads_release.zip")
-                  or name == "web_dlink_nothreads_release.zip"
-              ]
-              if not matches:
-                  raise SystemExit("Official web_dlink_nothreads_release.zip template not found")
-              payload = archive.read(matches[0])
+          ENTRY="$(unzip -Z1 /tmp/godot-export-templates.tpz | grep 'web_dlink_nothreads_release.zip
 
-          target = out / "web_dlink_nothreads_release.zip"
-          target.write_bytes(payload)
-          print(f"Installed {target} ({target.stat().st_size} bytes)")
-          PY
+      - name: Import Godot project
+        run: |
+          "$GODOT" --headless --path vendor/OpenVic/game --import
+
+      - name: Export browser-native Victoria II client
+        run: |
+          mkdir -p dist/site
+          "$GODOT" --headless --path vendor/OpenVic/game --export-release "Web" "$GITHUB_WORKSPACE/dist/site/index.html"
+          echo "=== Web export ==="
+          find dist/site -maxdepth 1 -type f -printf "%f %k KB\n" | sort
+
+      - name: Validate published native runtime
+        run: |
+          test -s dist/site/index.html
+          test -s dist/site/index.js
+          test -s dist/site/index.wasm
+          test -s dist/site/index.side.wasm
+          test -s dist/site/index.pck
+          OPENVIC_WASM="$(find dist/site -type f -name 'libopenvic*.wasm' | head -n 1)"
+          test -n "$OPENVIC_WASM"
+          test -s "$OPENVIC_WASM"
+          grep -Fq 'gdextensionLibs' dist/site/index.html
+          grep -Fqi 'openvic' dist/site/index.html
+          test ! -e dist/site/v2game.exe
+          test ! -e dist/site/victoria2.exe
+          if find dist/site -type f \( -iname 'provinces.bmp' -o -iname 'definition.csv' \) | grep -q .; then
+            echo "ERROR: proprietary Victoria II data entered the public site artifact"
+            exit 1
+          fi
+          file dist/site/index.wasm
+          file dist/site/index.side.wasm
+          file "$OPENVIC_WASM"
+
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload native site artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist/site
+
+      - name: Deploy native site
+        id: deployment
+        uses: actions/deploy-pages@v4
+ | head -n 1)"
+          test -n "$ENTRY"
+          unzip -p /tmp/godot-export-templates.tpz "$ENTRY" > "$TEMPLATE_ROOT/web_dlink_nothreads_release.zip"
+          test -s "$TEMPLATE_ROOT/web_dlink_nothreads_release.zip"
+          unzip -t "$TEMPLATE_ROOT/web_dlink_nothreads_release.zip"
+          ls -lh "$TEMPLATE_ROOT/web_dlink_nothreads_release.zip"
+          rm -f /tmp/godot-export-templates.tpz
 
       - name: Import Godot project
         run: |
