@@ -350,6 +350,75 @@ if logger_new not in gs_cpp:
 game_singleton_cpp.write_text(gs_cpp, encoding="utf-8")
 print("OpenVic base-game Web loader and pthread-safe logger patched.")
 
+# Raw WASM diagnostics around the definition loader. These deliberately bypass
+# both Godot and spdlog so a pthread/logger issue cannot hide the exact stall.
+game_manager_cpp = sim / "src/openvic-simulation/GameManager.cpp"
+gm_text = game_manager_cpp.read_text(encoding="utf-8")
+if "#include <cstdio>" not in gm_text:
+    gm_text = gm_text.replace('#include "GameManager.hpp"\n', '#include "GameManager.hpp"\n\n#include <cstdio>\n', 1)
+gm_old = """bool GameManager::load_definitions(Dataloader::localisation_callback_t localisation_callback) {
+\tif (definitions_loaded) {
+\t\tspdlog::error_s("Cannot load definitions - already loaded!");
+\t\treturn false;
+\t}
+
+\tbool ret = true;
+
+\tif (!dataloader.load_defines(game_rules_manager, definition_manager)) {"""
+gm_new = """bool GameManager::load_definitions(Dataloader::localisation_callback_t localisation_callback) {
+\tstd::printf("[WebLoadRaw] GameManager::load_definitions entered\\n");
+\tstd::fflush(stdout);
+\tif (definitions_loaded) {
+\t\tspdlog::error_s("Cannot load definitions - already loaded!");
+\t\treturn false;
+\t}
+
+\tbool ret = true;
+\tstd::printf("[WebLoadRaw] calling Dataloader::load_defines\\n");
+\tstd::fflush(stdout);
+
+\tif (!dataloader.load_defines(game_rules_manager, definition_manager)) {"""
+if gm_new not in gm_text:
+    if gm_old not in gm_text:
+        raise SystemExit("Pinned GameManager load_definitions changed; refusing blind patch.")
+    gm_text = gm_text.replace(gm_old, gm_new, 1)
+game_manager_cpp.write_text(gm_text, encoding="utf-8")
+
+dataloader_cpp = sim / "src/openvic-simulation/dataloader/Dataloader.cpp"
+dl = dataloader_cpp.read_text(encoding="utf-8")
+if "#include <cstdio>" not in dl:
+    # Insert after the file's first local include, preserving upstream layout.
+    first_include = dl.find("#include")
+    first_nl = dl.find("\\n", first_include)
+    dl = dl[:first_nl + 1] + "#include <cstdio>\\n" + dl[first_nl + 1:]
+dl_old = """bool Dataloader::load_defines(
+\tGameRulesManager const& game_rules_manager,
+\tDefinitionManager& definition_manager
+) {
+\tif (roots.empty()) {"""
+dl_new = """bool Dataloader::load_defines(
+\tGameRulesManager const& game_rules_manager,
+\tDefinitionManager& definition_manager
+) {
+\tstd::printf("[WebLoadRaw] Dataloader::load_defines entered; roots=%zu\\n", roots.size());
+\tstd::fflush(stdout);
+\tif (roots.empty()) {"""
+if dl_new not in dl:
+    if dl_old not in dl:
+        raise SystemExit("Pinned Dataloader load_defines entry changed; refusing blind patch.")
+    dl = dl.replace(dl_old, dl_new, 1)
+
+# Replace the diagnostic-only SPDLOG_INFO markers with raw stdout too.
+dl = dl.replace('SPDLOG_INFO("[WebLoad] sound/interface/bootstrap");', 'std::printf("[WebLoadRaw] sound/interface/bootstrap\\n"); std::fflush(stdout);')
+dl = dl.replace('SPDLOG_INFO("[WebLoad] common/defines.lua");', 'std::printf("[WebLoadRaw] common/defines.lua\\n"); std::fflush(stdout);')
+dl = dl.replace('SPDLOG_INFO("[WebLoad] goods/cultures/politics");', 'std::printf("[WebLoadRaw] goods/cultures/politics\\n"); std::fflush(stdout);')
+dl = dl.replace('SPDLOG_INFO("[WebLoad] map + provinces");', 'std::printf("[WebLoadRaw] map + provinces\\n"); std::fflush(stdout);')
+dl = dl.replace('SPDLOG_INFO("[WebLoad] units/rebels/technology");', 'std::printf("[WebLoadRaw] units/rebels/technology\\n"); std::fflush(stdout);')
+dl = dl.replace('SPDLOG_INFO("[WebLoad] history/events");', 'std::printf("[WebLoadRaw] history/events\\n"); std::fflush(stdout);')
+dl = dl.replace('SPDLOG_INFO("[WebLoad] definitions parsed");', 'std::printf("[WebLoadRaw] definitions parsed\\n"); std::fflush(stdout);')
+dataloader_cpp.write_text(dl, encoding="utf-8")
+print("Raw Web definition-loader diagnostics patched.")
+
 ecs_cpp = sim / "src/openvic-simulation/core/ecs/EcsThreadPool.cpp"
 ecs_text = ecs_cpp.read_text(encoding="utf-8")
 ecs_ctor = """EcsThreadPool::EcsThreadPool(uint32_t worker_count) {
