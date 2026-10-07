@@ -36,6 +36,29 @@ for function in ("_init", "_ready"):
         w = w.replace(needle, replacement, 1)
 window.write_text(w, encoding="utf-8")
 
+# The loading screen normally executes game initialization on a Godot Thread.
+# The first Web target intentionally has thread_support=false, so execute the
+# exact same Callable on the main Wasm thread instead.
+loading = GAME / "src/Systems/Startup/LoadingScreen.gd"
+l = loading.read_text(encoding="utf-8")
+l = l.replace(
+    "\tthread = Thread.new()\n",
+    '\tif not OS.has_feature("web"):\n\t\tthread = Thread.new()\n',
+    1
+)
+thread_start = "\tthread.start(thread_safe_function)\n"
+web_start = (
+    '\tif OS.has_feature("web"):\n'
+    '\t\tthread_safe_function.call()\n'
+    '\telse:\n'
+    '\t\tthread.start(thread_safe_function)\n'
+)
+if web_start not in l:
+    if thread_start not in l:
+        raise SystemExit("LoadingScreen.gd thread start layout changed")
+    l = l.replace(thread_start, web_start, 1)
+loading.write_text(l, encoding="utf-8")
+
 # Add a real Godot Web export preset with GDExtension support and no pthreads.
 presets = GAME / "export_presets.cfg"
 p = presets.read_text(encoding="utf-8")
