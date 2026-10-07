@@ -110,25 +110,28 @@ hash_old = """\tinline constexpr std::size_t hash_murmur3(std::size_t key, std::
 \t\treturn key;
 \t}"""
 hash_new = """\tinline constexpr std::size_t hash_murmur3(std::size_t key, std::size_t seed = MURMUR3_SEED) {
-\t\tkey ^= seed;
 \t\tif constexpr (sizeof(std::size_t) >= 8) {
-\t\t\tkey ^= key >> 33;
-\t\t\tkey *= static_cast<std::size_t>(0xff51afd7ed558ccdULL);
-\t\t\tkey ^= key >> 33;
-\t\t\tkey *= static_cast<std::size_t>(0xc4ceb9fe1a85ec53ULL);
-\t\t\tkey ^= key >> 33;
+\t\t\tstd::uint64_t value = static_cast<std::uint64_t>(key ^ seed);
+\t\t\tvalue ^= value >> 33;
+\t\t\tvalue *= UINT64_C(0xff51afd7ed558ccd);
+\t\t\tvalue ^= value >> 33;
+\t\t\tvalue *= UINT64_C(0xc4ceb9fe1a85ec53);
+\t\t\tvalue ^= value >> 33;
+\t\t\treturn static_cast<std::size_t>(value);
 \t\t} else {
 \t\t\t// MurmurHash3 fmix32 for wasm32/other 32-bit size_t targets.
-\t\t\tkey ^= key >> 16;
-\t\t\tkey *= static_cast<std::size_t>(0x85ebca6bU);
-\t\t\tkey ^= key >> 13;
-\t\t\tkey *= static_cast<std::size_t>(0xc2b2ae35U);
-\t\t\tkey ^= key >> 16;
+\t\t\tstd::uint32_t value = static_cast<std::uint32_t>(key ^ seed);
+\t\t\tvalue ^= value >> 16;
+\t\t\tvalue *= UINT32_C(0x85ebca6b);
+\t\t\tvalue ^= value >> 13;
+\t\t\tvalue *= UINT32_C(0xc2b2ae35);
+\t\t\tvalue ^= value >> 16;
+\t\t\treturn static_cast<std::size_t>(value);
 \t\t}
-\t\treturn key;
 \t}"""
 if hash_old not in hash_text:
     raise SystemExit("Pinned Hash.hpp Murmur finalizer changed; refusing blind patch.")
+hash_text = hash_text.replace("#include <cstddef>\n", "#include <cstddef>\n#include <cstdint>\n", 1)
 hash_hpp.write_text(hash_text.replace(hash_old, hash_new, 1), encoding="utf-8")
 
 ordered_hpp = sim / "src/openvic-simulation/types/OrderedContainers.hpp"
@@ -174,11 +177,18 @@ segment_old = """\t\tstruct SegmentHash {
 segment_new = """\t\tstruct SegmentHash {
 \t\t\tinline constexpr std::size_t operator()(Segment const& segment) const {
 \t\t\t\tif constexpr (sizeof(std::size_t) >= 8) {
-\t\t\t\t\treturn hash_murmur3(hash_murmur3(static_cast<std::size_t>(segment.key.first)) << 32) |
+\t\t\t\t\tstd::uint64_t high = static_cast<std::uint64_t>(
+\t\t\t\t\t\thash_murmur3(static_cast<std::size_t>(segment.key.first))
+\t\t\t\t\t);
+\t\t\t\t\treturn hash_murmur3(static_cast<std::size_t>(high << 32)) |
 \t\t\t\t\t\thash_murmur3(static_cast<std::size_t>(segment.key.second));
 \t\t\t\t} else {
-\t\t\t\t\tstd::size_t seed = std::hash<points_key_type> {}(segment.key.first);
-\t\t\t\t\thash_combine(seed, segment.key.second);
+\t\t\t\t\tconst std::uint64_t first = segment.key.first;
+\t\t\t\t\tconst std::uint64_t second = segment.key.second;
+\t\t\t\t\tstd::size_t seed = hash_murmur3(static_cast<std::size_t>(first ^ (first >> 32)));
+\t\t\t\t\tconst std::size_t folded_second = static_cast<std::size_t>(second ^ (second >> 32));
+\t\t\t\t\tseed ^= hash_murmur3(folded_second) + static_cast<std::size_t>(0x9e3779b9U) +
+\t\t\t\t\t\t(seed << 6) + (seed >> 2);
 \t\t\t\t\treturn hash_murmur3(seed);
 \t\t\t\t}
 \t\t\t}
