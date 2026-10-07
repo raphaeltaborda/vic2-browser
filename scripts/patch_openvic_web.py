@@ -7,34 +7,9 @@ OPENVIC = ROOT / "vendor" / "OpenVic"
 cmake = OPENVIC / "CMakeLists.txt"
 text = cmake.read_text(encoding="utf-8")
 
-# Emscripten's CMake toolchain disables shared libraries while project() is
-# configuring the platform. The workaround therefore has to be injected *by*
-# project(), not afterwards. This mirrors godot-cpp's own emsdkHack.cmake.
-hook = OPENVIC / "cmake" / "vic2_web_emsdk_hack.cmake"
-hook.parent.mkdir(parents=True, exist_ok=True)
-hook.write_text(
-    """if(CMAKE_SYSTEM_NAME STREQUAL "Emscripten")
-    set_property(GLOBAL PROPERTY TARGET_SUPPORTS_SHARED_LIBS TRUE)
-    set(CMAKE_SHARED_LIBRARY_CREATE_C_FLAGS "-sSIDE_MODULE=1")
-    set(CMAKE_SHARED_LIBRARY_CREATE_CXX_FLAGS "-sSIDE_MODULE=1")
-    set(CMAKE_SHARED_LIBRARY_SUFFIX "")
-    set(CMAKE_STRIP FALSE)
-    set(CMAKE_SYSTEM_PROCESSOR "wasm32")
-endif()
-""",
-    encoding="utf-8",
-)
-
-project_line = "project(openvic LANGUAGES CXX)\n"
-project_hook = (
-    'set(CMAKE_PROJECT_openvic_INCLUDE '
-    '"${CMAKE_CURRENT_LIST_DIR}/cmake/vic2_web_emsdk_hack.cmake")\n'
-    + project_line
-)
-if "CMAKE_PROJECT_openvic_INCLUDE" not in text:
-    if project_line not in text:
-        raise SystemExit("OpenVic project() declaration changed upstream.")
-    text = text.replace(project_line, project_hook, 1)
+# CMake's Emscripten platform intentionally reports no traditional shared
+# libraries. For Web we therefore avoid add_library(... SHARED) entirely and
+# create an Emscripten link target that emits a SIDE_MODULE .wasm directly.
 
 
 platform_block = '''if(APPLE)
@@ -70,20 +45,26 @@ if platform_block not in text:
     raise SystemExit("OpenVic CMake platform block changed upstream; refusing blind patch.")
 
 target_line = "add_library(openvic SHARED ${openvic_sources})\n"
-target_guard = """add_library(openvic SHARED ${openvic_sources})
-
-if(CMAKE_SYSTEM_NAME STREQUAL "Emscripten")
-    get_target_property(OV_OPENVIC_TARGET_TYPE openvic TYPE)
-    message(STATUS "OpenVic Web target type: ${OV_OPENVIC_TARGET_TYPE}")
-    if(NOT OV_OPENVIC_TARGET_TYPE STREQUAL "SHARED_LIBRARY")
-        message(FATAL_ERROR "OpenVic Web target degraded to ${OV_OPENVIC_TARGET_TYPE}; SIDE_MODULE build is impossible")
-    endif()
+target_replacement = """if(CMAKE_SYSTEM_NAME STREQUAL "Emscripten")
+    add_executable(openvic ${openvic_sources})
+    target_link_options(
+        openvic
+        PRIVATE
+            -sSIDE_MODULE=1
+            -sWASM_BIGINT
+            -sSUPPORT_LONGJMP=wasm
+            -fvisibility=hidden
+            -shared
+    )
+else()
+    add_library(openvic SHARED ${openvic_sources})
 endif()
 """
-if "OV_OPENVIC_TARGET_TYPE" not in text:
+if "add_executable(openvic ${openvic_sources})" not in text:
     if target_line not in text:
         raise SystemExit("OpenVic add_library() layout changed upstream.")
-    text = text.replace(target_line, target_guard, 1)
+    text = text.replace(target_line, target_replacement, 1)
+
 
 cmake.write_text(text.replace(platform_block, replacement), encoding="utf-8")
 
