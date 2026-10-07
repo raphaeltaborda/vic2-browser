@@ -328,8 +328,27 @@ if compat_new not in gs_cpp:
     if compat_old not in gs_cpp:
         raise SystemExit("Pinned GameSingleton compatibility loader changed; refusing blind patch.")
     gs_cpp = gs_cpp.replace(compat_old, compat_new, 1)
+
+# The upstream Godot logger uses callback_sink_st and calls Godot APIs from the
+# loading thread. With Web pthreads this can block as soon as the simulation
+# emits its first SPDLOG_INFO. Keep Emscripten's default console sink instead;
+# it is compatible with pthread stdout/stderr and avoids crossing into Godot
+# from the worker thread.
+logger_old = """void GameSingleton::setup_logger() {
+\tspdlog::sink_ptr godot_sink = std::make_shared<spdlog::sinks::callback_sink_st>([](spdlog::details::log_msg const& msg) {"""
+logger_new = """void GameSingleton::setup_logger() {
+#if defined(__EMSCRIPTEN__) && defined(__EMSCRIPTEN_PTHREADS__)
+\tUtilityFunctions::print("[WebLoad] pthread logger: using Emscripten default sink");
+\treturn;
+#endif
+\tspdlog::sink_ptr godot_sink = std::make_shared<spdlog::sinks::callback_sink_st>([](spdlog::details::log_msg const& msg) {"""
+if logger_new not in gs_cpp:
+    if logger_old not in gs_cpp:
+        raise SystemExit("Pinned GameSingleton logger changed; refusing blind patch.")
+    gs_cpp = gs_cpp.replace(logger_old, logger_new, 1)
+
 game_singleton_cpp.write_text(gs_cpp, encoding="utf-8")
-print("OpenVic base-game Web loader patched to skip unused mod scan.")
+print("OpenVic base-game Web loader and pthread-safe logger patched.")
 
 ecs_cpp = sim / "src/openvic-simulation/core/ecs/EcsThreadPool.cpp"
 ecs_text = ecs_cpp.read_text(encoding="utf-8")
