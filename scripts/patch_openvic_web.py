@@ -99,20 +99,20 @@ sim = OPENVIC / "extension" / "deps" / "openvic-simulation"
 dataloader_cpp = sim / "src/openvic-simulation/dataloader/Dataloader.cpp"
 dl = dataloader_cpp.read_text(encoding="utf-8")
 markers = [
-    ('\tbool ret = true;\n\tif (!_load_sound_effect_defines(definition_manager)) {',
-     '\tbool ret = true;\n\tSPDLOG_INFO("[WebLoad] sound/interface/bootstrap");\n\tif (!_load_sound_effect_defines(definition_manager)) {'),
+    ('\tbool ret = true;\n\n\tif (!_load_sound_effect_defines(definition_manager)) {',
+     '\tbool ret = true;\n\n\tSPDLOG_INFO("[WebLoad] sound/interface/bootstrap");\n\tif (!_load_sound_effect_defines(definition_manager)) {'),
     ('\tif (!definition_manager.get_define_manager().load_defines_file(',
      '\tSPDLOG_INFO("[WebLoad] common/defines.lua");\n\tif (!definition_manager.get_define_manager().load_defines_file('),
     ('\tif (!_load_goods(definition_manager)) {',
      '\tSPDLOG_INFO("[WebLoad] goods/cultures/politics");\n\tif (!_load_goods(definition_manager)) {'),
-    ('\tif (!_load_map(definition_manager)) {',
-     '\tSPDLOG_INFO("[WebLoad] map + provinces");\n\tif (!_load_map(definition_manager)) {'),
+    ('\tif (!_load_map_dir(definition_manager)) {',
+     '\tSPDLOG_INFO("[WebLoad] map + provinces");\n\tif (!_load_map_dir(definition_manager)) {'),
     ('\tif (!_load_units(definition_manager)) {',
      '\tSPDLOG_INFO("[WebLoad] units/rebels/technology");\n\tif (!_load_units(definition_manager)) {'),
-    ('\tif (!_load_history(definition_manager)) {',
-     '\tSPDLOG_INFO("[WebLoad] history/events");\n\tif (!_load_history(definition_manager)) {'),
-    ('\treturn ret;\n}\n\nbool Dataloader::load_localisation_files',
-     '\tSPDLOG_INFO("[WebLoad] definitions parsed");\n\treturn ret;\n}\n\nbool Dataloader::load_localisation_files'),
+    ('\tif (!_load_history(definition_manager, false)) {',
+     '\tSPDLOG_INFO("[WebLoad] history/events");\n\tif (!_load_history(definition_manager, false)) {'),
+    ('\tret &= parse_scripts(definition_manager);\n\n\tfree_cache();\n\n\treturn ret;',
+     '\tret &= parse_scripts(definition_manager);\n\n\tfree_cache();\n\n\tSPDLOG_INFO("[WebLoad] definitions parsed");\n\treturn ret;'),
 ]
 for old, new in markers:
     if new in dl:
