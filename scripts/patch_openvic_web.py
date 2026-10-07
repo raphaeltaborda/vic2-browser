@@ -538,6 +538,85 @@ dl = dl.replace(parse_old, parse_new, 1)
 dataloader_cpp.write_text(dl, encoding="utf-8")
 print("Raw Web definition-loader diagnostics patched.")
 
+# lexy::read_file() selects its POSIX implementation on Emscripten because
+# __unix__ is defined. Files above 32 KiB then go through mmap(), which is a
+# poor fit for the browser MEMFS/pthread path. Keep native builds unchanged,
+# but use a simple fread -> owned lexy buffer path for Web.
+parse_handler_hpp = sim / "deps/openvic-dataloader/src/openvic-dataloader/detail/ParseHandler.hpp"
+ph = parse_handler_hpp.read_text(encoding="utf-8")
+if "#include <cerrno>" not in ph:
+    ph = ph.replace(
+        "#include <cstddef>\n",
+        "#include <cstddef>\n#include <cerrno>\n#include <cstdio>\n",
+        1,
+    )
+
+load_file_old = """		buffer_error load_file(const char* path, std::optional<Encoding> fallback) {
+			lexy::read_file_result file = lexy::read_file<lexy::default_encoding, lexy::encoding_endianness::bom>(path);
+
+			if (!file) {
+				return ovdl::detail::from_underlying<buffer_error>(ovdl::detail::to_underlying(file.error()));
+			}
+
+			return load_buffer_impl(std::move(file).buffer(), path, fallback);
+		}"""
+load_file_new = """		buffer_error load_file(const char* path, std::optional<Encoding> fallback) {
+#if defined(__EMSCRIPTEN__)
+			std::FILE* file = std::fopen(path, "rb");
+			if (file == nullptr) {
+				switch (errno) {
+					case ENOENT:
+					case ENOTDIR:
+					case ELOOP:
+						return buffer_error::file_not_found;
+					case EACCES:
+					case EPERM:
+						return buffer_error::permission_denied;
+					default:
+						return buffer_error::os_error;
+				}
+			}
+
+			if (std::fseek(file, 0, SEEK_END) != 0) {
+				std::fclose(file);
+				return buffer_error::os_error;
+			}
+			long const end = std::ftell(file);
+			if (end < 0 || std::fseek(file, 0, SEEK_SET) != 0) {
+				std::fclose(file);
+				return buffer_error::os_error;
+			}
+
+			std::size_t const size = static_cast<std::size_t>(end);
+			std::string bytes(size, char(0));
+			if (size > 0 && std::fread(bytes.data(), 1, size, file) != size) {
+				std::fclose(file);
+				return buffer_error::os_error;
+			}
+			std::fclose(file);
+
+			lexy::buffer<lexy::default_encoding> buffer(bytes.data(), bytes.size());
+			if (buffer.data() == nullptr) {
+				return buffer_error::buffer_is_null;
+			}
+			return load_buffer_impl(std::move(buffer), path, fallback);
+#else
+			lexy::read_file_result file = lexy::read_file<lexy::default_encoding, lexy::encoding_endianness::bom>(path);
+
+			if (!file) {
+				return ovdl::detail::from_underlying<buffer_error>(ovdl::detail::to_underlying(file.error()));
+			}
+
+			return load_buffer_impl(std::move(file).buffer(), path, fallback);
+#endif
+		}"""
+if load_file_new not in ph:
+    if load_file_old not in ph:
+        raise SystemExit("Pinned OpenVic-Dataloader ParseHandler::load_file changed; refusing blind patch.")
+    ph = ph.replace(load_file_old, load_file_new, 1)
+parse_handler_hpp.write_text(ph, encoding="utf-8")
+print("OpenVic-Dataloader Web file loading patched to avoid lexy mmap path.")
+
 ecs_cpp = sim / "src/openvic-simulation/core/ecs/EcsThreadPool.cpp"
 ecs_text = ecs_cpp.read_text(encoding="utf-8")
 ecs_ctor = """EcsThreadPool::EcsThreadPool(uint32_t worker_count) {

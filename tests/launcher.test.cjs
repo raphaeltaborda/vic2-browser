@@ -122,3 +122,13 @@ test('raw sound trace distinguishes file IO from grammar parsing', () => {
     assert.ok(portPatch.includes(marker), 'missing diagnostic marker: ' + marker);
   }
 });
+
+
+test('Web dataloader bypasses lexy mmap with buffered file IO', () => {
+  const portPatch = fs.readFileSync('scripts/patch_openvic_web.py', 'utf8');
+  assert.match(portPatch, /ParseHandler::load_file/);
+  assert.match(portPatch, /std::fopen\(path, "rb"\)/);
+  assert.match(portPatch, /std::fread\(bytes\.data\(\), 1, size, file\)/);
+  assert.match(portPatch, /#if defined\(__EMSCRIPTEN__\)/);
+  assert.match(portPatch, /load_buffer_impl\(std::move\(buffer\), path, fallback\)/);
+});

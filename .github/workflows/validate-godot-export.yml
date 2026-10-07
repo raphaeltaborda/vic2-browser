@@ -189,6 +189,12 @@ jobs:
           fi
           echo "MusicManager playlist bounds patch verified."
 
+          PARSE_HANDLER="vendor/OpenVic/extension/deps/openvic-simulation/deps/openvic-dataloader/src/openvic-dataloader/detail/ParseHandler.hpp"
+          grep -Fq '#if defined(__EMSCRIPTEN__)' "$PARSE_HANDLER"
+          grep -Fq 'std::fread(bytes.data(), 1, size, file)' "$PARSE_HANDLER"
+          grep -Fq 'return load_buffer_impl(std::move(buffer), path, fallback);' "$PARSE_HANDLER"
+          echo "OpenVic-Dataloader Web buffered file reader verified."
+
       - name: Install reusable native extensions into project
         run: |
           mkdir -p vendor/OpenVic/game/bin/openvic
