@@ -1,0 +1,16 @@
+# Proprietary Victoria II data must never be committed.
+Victoria 2/
+Victoria II/
+game-data/
+user-game-data/
+*.exe
+*.dll
+*.zip
+*.7z
+*.rar
+
+# Build outputs and downloaded upstream trees.
+vendor/
+build/
+dist/
+.godot/
