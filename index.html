@@ -5,20 +5,32 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Victoria II Browser</title>
     <link rel="stylesheet" href="style.css">
+    <script src="coi-serviceworker.js"></script>
 </head>
 <body>
     <main class="app">
-        <h1>Victoria II Browser</h1>
-        <p>Primeiro teste: localizar os arquivos do jogo no seu computador.</p>
+        <div class="eyebrow">VIC2-BROWSER · PROVA DE CONCEITO</div>
+        <h1>Victoria II no navegador</h1>
+        <p class="intro">
+            Antes de iniciar o BoxedWine, estamos verificando se este navegador
+            oferece os recursos necessários para executar o runtime.
+        </p>
 
-        <label class="folder-button">
-            Selecionar pasta do Victoria II
-            <input id="game-folder" type="file" webkitdirectory multiple>
-        </label>
+        <section class="panel">
+            <h2>Diagnóstico do navegador</h2>
+            <div id="checks" class="checks">
+                <div class="check pending">Executando testes…</div>
+            </div>
+        </section>
 
-        <div id="status" class="status">
-            Nenhuma pasta selecionada.
-        </div>
+        <section class="panel">
+            <h2>Próxima etapa</h2>
+            <p id="next-step">Aguardando o diagnóstico.</p>
+        </section>
+
+        <footer>
+            Nenhum arquivo do Victoria II é armazenado neste repositório.
+        </footer>
     </main>
 
     <script src="script.js"></script>
