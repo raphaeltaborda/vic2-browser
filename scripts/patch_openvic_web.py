@@ -432,32 +432,28 @@ sound_old = """bool Dataloader::_load_sound_effect_defines(DefinitionManager& de
 
 }"""
 sound_new = """bool Dataloader::_load_sound_effect_defines(DefinitionManager& definition_manager) const {
-\tstd::printf("[WebLoadRaw] sound.sfx: enter\\n");
-\tstd::fflush(stdout);
-\tstatic constexpr std::string_view sfx_file = "interface/sound.sfx";
-\tstd::printf("[WebLoadRaw] sound.sfx: lookup_file\\n");
-\tstd::fflush(stdout);
-\tconst fs::path path = lookup_file(sfx_file);
-\tstd::printf("[WebLoadRaw] sound.sfx: lookup done: %s\\n", path.string().c_str());
-\tstd::fflush(stdout);
-
-\tbool ret = true;
 \tSoundEffectManager& sound_effect_manager = definition_manager.get_sound_effect_manager();
 
-\tstd::printf("[WebLoadRaw] sound.sfx: parse_defines begin\\n");
+#if defined(__EMSCRIPTEN__)
+\t// Sound definitions are not required to construct the simulation state.
+\t// The pinned SoundEffect AST walker currently aborts the Web pthread on the
+\t// first vanilla entry ("click"), so keep audio out of the browser bootstrap
+\t// until that subsystem is ported independently.
+\tstd::puts("[WebLoadRaw] sound.sfx: skipped on Web; audio deferred");
 \tstd::fflush(stdout);
-\tauto parsed_sound = parse_defines(path);
-\tstd::printf("[WebLoadRaw] sound.sfx: parse_defines done\\n");
-\tstd::fflush(stdout);
-\tret &= sound_effect_manager.load_sound_defines_file(*this, parsed_sound.get_file_node());
-\tstd::printf("[WebLoadRaw] sound.sfx: manager load done\\n");
-\tstd::fflush(stdout);
-
 \tsound_effect_manager.lock_sound_effects();
-\tstd::printf("[WebLoadRaw] sound.sfx: locked\\n");
+\tstd::puts("[WebLoadRaw] sound.sfx: empty registry locked");
 \tstd::fflush(stdout);
+\treturn true;
+#else
+\tstatic constexpr std::string_view sfx_file = "interface/sound.sfx";
+\tconst fs::path path = lookup_file(sfx_file);
 
+\tbool ret = true;
+\tret &= sound_effect_manager.load_sound_defines_file(*this, parse_defines(path).get_file_node());
+\tsound_effect_manager.lock_sound_effects();
 \treturn ret;
+#endif
 
 }"""
 if sound_new not in dl:

@@ -165,3 +165,15 @@ test('Web sound.sfx bypasses generic pre-count and reserve traversal', () => {
   assert.match(portPatch, /#else\n\treturn expect_dictionary_reserve_length/);
   assert.match(portPatch, /#else\n\tret &= expect_dictionary_keys/);
 });
+
+
+test('Web boot defers sound effects instead of aborting on sound.sfx', () => {
+  const portPatch = fs.readFileSync('scripts/patch_openvic_web.py', 'utf8');
+  assert.match(portPatch, /sound\.sfx: skipped on Web; audio deferred/);
+  assert.match(portPatch, /sound\.sfx: empty registry locked/);
+  const block = portPatch.match(/sound_new = """([\s\S]*?)"""/);
+  assert.ok(block, 'sound_new patch body not found');
+  assert.match(block[1], /#if defined\(__EMSCRIPTEN__\)/);
+  assert.match(block[1], /return true;\n#else/);
+  assert.match(block[1], /sound_effect_manager\.load_sound_defines_file/);
+});
