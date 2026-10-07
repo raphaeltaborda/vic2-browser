@@ -7,6 +7,7 @@ on:
     paths:
       - 'patches/openvic/**'
       - 'patches/openvic-scripts/**'
+      - 'patches/openvic-simulation/**'
       - '.github/workflows/build-openvic-wasm.yml'
   workflow_dispatch:
 
@@ -56,6 +57,10 @@ jobs:
           git -C vendor/OpenVic-scripts apply --check ../../patches/openvic-scripts/0001-portable-libcpp-abi-namespace.patch
           git -C vendor/OpenVic-scripts apply ../../patches/openvic-scripts/0001-portable-libcpp-abi-namespace.patch
           git -C vendor/OpenVic-scripts diff --check
+
+          git -C vendor/OpenVic/extension/deps/openvic-simulation apply --check ../../../../../patches/openvic-simulation/0001-wasm32-size-t-hashing.patch
+          git -C vendor/OpenVic/extension/deps/openvic-simulation apply ../../../../../patches/openvic-simulation/0001-wasm32-size-t-hashing.patch
+          git -C vendor/OpenVic/extension/deps/openvic-simulation diff --check
 
       - name: Configure wasm32 pthread build
         run: |
