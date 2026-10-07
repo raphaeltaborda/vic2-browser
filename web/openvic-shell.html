@@ -215,6 +215,7 @@
       checks.replaceChildren();
       const map = fileMap();
       const required = [
+        ['v2game.exe', 'Cópia do Victoria II'],
         ['common/defines.lua', 'Defines'],
         ['map/definition.csv', 'Definição de províncias'],
         ['map/provinces.bmp', 'Mapa de províncias']
@@ -268,6 +269,14 @@
       for (const file of selected) {
         const rel = relativePath(file);
         if (!rel) continue;
+
+        // The Windows binaries prove the selected folder is an installation,
+        // but a native Web port never executes or needs them.
+        const lower = rel.toLowerCase();
+        if (lower.endsWith('.exe') || lower.endsWith('.dll')) {
+          done += file.size;
+          continue;
+        }
 
         engine.copyToFS('/vic2/' + rel, await file.arrayBuffer());
         done += file.size;
