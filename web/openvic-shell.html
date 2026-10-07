@@ -11,6 +11,8 @@
     html, body { margin:0; width:100%; min-height:100%; background:#0d1014; color:#eef1f4; }
     body { overflow:auto; }
     #canvas { display:none; width:100vw; height:100vh; background:#000; outline:none; }
+    #runtime-status { display:none; position:fixed; z-index:20; left:16px; bottom:16px; max-width:min(680px,calc(100vw - 32px)); padding:10px 13px; border:1px solid #3a4652; border-radius:8px; background:rgba(8,12,16,.88); color:#d8dee4; font:12px/1.45 ui-monospace,SFMono-Regular,Consolas,monospace; pointer-events:none; }
+    #runtime-status.error { border-color:#8f474f; color:#ffb7bd; }
     #launcher { min-height:100vh; display:grid; place-items:center; padding:28px; background:
       radial-gradient(circle at 30% 10%, rgba(102,121,143,.16), transparent 34%),
       linear-gradient(180deg,#11151a,#0a0d10); }
@@ -44,6 +46,7 @@
 </head>
 <body>
   <canvas id="canvas" tabindex="0">Seu navegador não suporta canvas.</canvas>
+  <div id="runtime-status">OpenVic Web iniciando…</div>
 
   <main id="launcher">
     <section class="card">
@@ -115,6 +118,7 @@
     const errorEl = document.getElementById('error');
     const godotState = document.getElementById('godot-state');
     const openvicState = document.getElementById('openvic-state');
+    const runtimeStatus = document.getElementById('runtime-status');
 
     let selected = [];
     let validated = false;
@@ -182,8 +186,23 @@
         engine = new Engine(Object.assign({}, GODOT_CONFIG, {
           canvas,
           focusCanvas: false,
-          onPrint: (...args) => { console.log(...args); log(args.join(' ')); },
-          onPrintError: (...args) => { console.error(...args); log('[Godot] ' + args.join(' ')); },
+          onPrint: (...args) => {
+            const line = args.join(' ');
+            console.log(...args);
+            log(line);
+            if (line.includes('Loading took ')) {
+              runtimeStatus.textContent = 'OpenVic carregado · abrindo menu…';
+              setTimeout(() => { runtimeStatus.style.display = 'none'; }, 1800);
+            }
+          },
+          onPrintError: (...args) => {
+            const line = args.join(' ');
+            console.error(...args);
+            log('[Godot] ' + line);
+            runtimeStatus.classList.add('error');
+            runtimeStatus.textContent = 'OpenVic reportou erro durante a inicialização. Consulte o log/console.';
+            runtimeStatus.style.display = 'block';
+          },
         }));
 
         const initTimeout = new Promise((_, reject) => {
@@ -333,6 +352,9 @@
         // can leave the launcher apparently frozen at 100%.
         launcher.style.display = 'none';
         canvas.style.display = 'block';
+        runtimeStatus.classList.remove('error');
+        runtimeStatus.textContent = 'OpenVic iniciou · preparando a tela de carregamento…';
+        runtimeStatus.style.display = 'block';
         canvas.focus();
         await new Promise(requestAnimationFrame);
         await new Promise(requestAnimationFrame);
@@ -355,6 +377,7 @@
       } catch (err) {
         launcher.style.display = 'grid';
         canvas.style.display = 'none';
+        runtimeStatus.style.display = 'none';
         showError(err);
         status.textContent = 'Falha ao iniciar.';
         launchButton.disabled = false;

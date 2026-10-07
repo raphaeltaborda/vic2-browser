@@ -9,9 +9,9 @@ on:
   workflow_dispatch:
     inputs:
       build_run_id:
-        description: Successful Build OpenVic Web port run ID to reuse
-        required: true
-        default: "37594966382"
+        description: Optional successful Build OpenVic Web port run ID to reuse
+        required: false
+        default: ""
   push:
     branches: ["main"]
     paths:
@@ -27,27 +27,83 @@ concurrency:
   group: validate-godot-web-main
   cancel-in-progress: true
 
+env:
+  OPENVIC_COMMIT: d3361890c62ede9464eb41af7f797e87dedf4b28
+
 jobs:
   export-smoke:
     if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-24.04
-    timeout-minutes: 60
-    env:
-      OPENVIC_BUILD_RUN_ID: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.id || (github.event_name == 'workflow_dispatch' && inputs.build_run_id || '37594966382') }}
+    timeout-minutes: 45
 
     steps:
       - name: Checkout vic2-browser
         uses: actions/checkout@v4
 
-      - name: Download freshly validated wasm artifact
+      - name: Resolve reusable native build
+        id: native-build
+        uses: actions/github-script@v7
+        env:
+          REQUESTED_BUILD_RUN_ID: ${{ github.event_name == 'workflow_dispatch' && inputs.build_run_id || '' }}
+        with:
+          script: |
+            let runId = '';
+            if (context.eventName === 'workflow_run') {
+              runId = String(context.payload.workflow_run.id);
+            } else if (process.env.REQUESTED_BUILD_RUN_ID) {
+              runId = process.env.REQUESTED_BUILD_RUN_ID;
+            } else {
+              const runs = await github.paginate(github.rest.actions.listWorkflowRuns, {
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                workflow_id: 'build-openvic-web.yml',
+                branch: 'main',
+                per_page: 20,
+              });
+              for (const run of runs) {
+                if (run.status !== 'completed' || run.conclusion !== 'success') continue;
+                const artifacts = await github.rest.actions.listWorkflowRunArtifacts({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  run_id: run.id,
+                  per_page: 100,
+                });
+                const names = new Set(
+                  artifacts.data.artifacts.filter(a => !a.expired).map(a => a.name)
+                );
+                if (
+                  names.has('openvic-web-extension') &&
+                  names.has('openvic-linux-editor-extension')
+                ) {
+                  runId = String(run.id);
+                  break;
+                }
+              }
+            }
+            if (!runId) {
+              core.setFailed('No successful native OpenVic build with both reusable artifacts was found.');
+              return;
+            }
+            core.info('Reusing native build run ' + runId);
+            core.setOutput('run_id', runId);
+
+      - name: Download validated wasm artifact
         uses: actions/download-artifact@v4
         with:
           name: openvic-web-extension
           path: engine-artifact
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          run-id: ${{ env.OPENVIC_BUILD_RUN_ID }}
+          run-id: ${{ steps.native-build.outputs.run_id }}
 
-      - name: Assert OpenVic artifact is real WebAssembly
+      - name: Download cached Linux editor extension
+        uses: actions/download-artifact@v4
+        with:
+          name: openvic-linux-editor-extension
+          path: editor-artifact
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: ${{ steps.native-build.outputs.run_id }}
+
+      - name: Assert reusable native artifacts
         run: |
           python3 - <<'PY'
           from pathlib import Path
@@ -57,19 +113,24 @@ jobs:
           print("OpenVic artifact magic:", magic)
           if magic[:4].hex() != "0061736d":
               raise SystemExit("Downloaded OpenVic artifact is not a WebAssembly binary.")
+
+          linux = Path("editor-artifact/libopenvic.linux.editor.x86_64.so")
+          if not linux.is_file() or linux.stat().st_size == 0:
+              raise SystemExit("Linux editor extension artifact is missing.")
+          print("Linux editor artifact:", linux.stat().st_size, "bytes")
           PY
 
-      - name: Install native build tools
+      - name: Install export runtime tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y ninja-build cmake python3 python3-pip pkg-config libtbb-dev unzip
+          sudo apt-get install -y python3 python3-pip libtbb-dev unzip
 
       - name: Fetch pinned OpenVic source
         run: |
           mkdir -p vendor
           git clone --recursive https://github.com/OpenVicProject/OpenVic.git vendor/OpenVic
           cd vendor/OpenVic
-          git checkout --detach d3361890c62ede9464eb41af7f797e87dedf4b28
+          git checkout --detach "$OPENVIC_COMMIT"
           git submodule update --init --recursive
 
       - name: Apply current port and Godot Web patches
@@ -77,15 +138,13 @@ jobs:
           python3 scripts/patch_openvic_web.py
           python3 scripts/prepare_openvic_godot_web.py
 
-      - name: Build Linux editor extension
-        working-directory: vendor/OpenVic
+      - name: Install reusable native extensions into project
         run: |
-          cmake --preset linux-x64-editor -DOPENVIC_USE_PCH=OFF -DOPENVIC_SIM_BUILD_HEADLESS=OFF -DOPENVIC_SIM_BUILD_TESTS=OFF -DOPENVIC_SIM_BUILD_BENCHMARKS=OFF
-          cmake --build --preset linux-x64-editor --parallel 4
-
-      - name: Install wasm into project
-        run: |
+          mkdir -p vendor/OpenVic/game/bin/openvic
           cp engine-artifact/libopenvic.web.template_release.wasm32.nothreads.wasm vendor/OpenVic/game/bin/openvic/
+          cp editor-artifact/libopenvic.linux.editor.x86_64.so vendor/OpenVic/game/bin/openvic/
+          test -s vendor/OpenVic/game/bin/openvic/libopenvic.web.template_release.wasm32.nothreads.wasm
+          test -s vendor/OpenVic/game/bin/openvic/libopenvic.linux.editor.x86_64.so
           grep -F 'web.wasm32.single.release' vendor/OpenVic/game/bin/openvic.gdextension
 
       - name: Install Godot editor
@@ -113,7 +172,6 @@ jobs:
           unzip -p /tmp/godot-export-templates.tpz "$ENTRY" > "$TEMPLATE_ROOT/web_dlink_nothreads_release.zip"
           test -s "$TEMPLATE_ROOT/web_dlink_nothreads_release.zip"
           unzip -t "$TEMPLATE_ROOT/web_dlink_nothreads_release.zip"
-          ls -lh "$TEMPLATE_ROOT/web_dlink_nothreads_release.zip"
           rm -f /tmp/godot-export-templates.tpz
 
       - name: Import project
@@ -129,6 +187,8 @@ jobs:
           test -s dist/site/index.js
           test -s dist/site/index.wasm
           test -s dist/site/index.side.wasm
+          test -s dist/site/index.pck
+          test -s dist/site/libopenvic.web.template_release.wasm32.nothreads.wasm
           grep -F "Confirmo que os arquivos selecionados pertencem a uma cópia legítima" dist/site/index.html
 
       - name: Upload export for inspection
@@ -137,8 +197,9 @@ jobs:
           name: godot-web-export-smoke
           path: dist/site
           if-no-files-found: error
+          retention-days: 90
 
-      - name: Smoke-test Godot and OpenVic in Chromium
+      - name: Smoke-test init and real Godot callMain in Chromium
         run: |
           python3 -m pip install --user --break-system-packages playwright
 
@@ -182,18 +243,36 @@ jobs:
                           last = state
 
                       if godot == "carregado" and openvic == "carregado":
-                          print("Browser smoke test passed.")
-                          await browser.close()
-                          return
+                          break
 
                       if godot == "falha" or openvic == "falha" or error:
                           print("\n".join(console_lines[-100:]))
                           raise SystemExit(f"Browser runtime failed: {state}")
 
                       await page.wait_for_timeout(1000)
+                  else:
+                      print("\n".join(console_lines[-100:]))
+                      raise SystemExit(f"Browser runtime timed out: {last}")
 
-                  print("\n".join(console_lines[-100:]))
-                  raise SystemExit(f"Browser runtime timed out: {last}")
+                  # Exercise the same init -> copyToFS -> start/callMain path used
+                  # by the real launcher, but --help exits before proprietary
+                  # Victoria II data is required.
+                  await page.evaluate("""async () => {
+                      const pack = await copyProjectPack();
+                      await engine.start({
+                          canvas,
+                          args: ['--main-pack', pack, '--', '--help'],
+                      });
+                  }""")
+                  await page.wait_for_timeout(2500)
+                  runtime_log = await page.locator("#log").inner_text()
+                  if "Usage:" not in runtime_log:
+                      print("\n".join(console_lines[-150:]))
+                      print(runtime_log[-8000:])
+                      raise SystemExit("Godot callMain smoke test did not reach OpenVic --help output.")
+
+                  print("Browser smoke test passed: init + GDExtension + PCK + callMain.")
+                  await browser.close()
 
           asyncio.run(main())
           PY

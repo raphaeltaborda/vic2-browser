@@ -61,6 +61,28 @@ if web_start not in l:
     l = l.replace(thread_start, web_start, 1)
 loading.write_text(l, encoding="utf-8")
 
+# The desktop startup scene is covered by an autoplay .ogv splash while the
+# loading screen starts hidden. Browser autoplay/video support can leave that
+# layer permanently black, so Web skips the splash and reveals loading UI
+# immediately. Native builds keep the upstream startup sequence unchanged.
+game_start = GAME / "src/Systems/Startup/GameStart.gd"
+gs = game_start.read_text(encoding="utf-8")
+ready = "func _ready() -> void:\n"
+web_ready = (
+    ready
+    + '\tif OS.has_feature("web"):\n'
+    + '\t\tvar splash := get_node_or_null("SplashContainer")\n'
+    + '\t\tif splash != null:\n'
+    + '\t\t\tsplash.hide()\n'
+    + '\t\t\tsplash.queue_free()\n'
+    + '\t\tloading_screen.show()\n'
+)
+if web_ready not in gs:
+    if ready not in gs:
+        raise SystemExit("GameStart.gd missing _ready")
+    gs = gs.replace(ready, web_ready, 1)
+game_start.write_text(gs, encoding="utf-8")
+
 # Browser canvas sizing/fullscreen are controlled by the HTML shell. Avoid
 # desktop-only monitor/fullscreen/VSync operations during startup.
 settings = GAME / "src/Autoload/Settings/GameSettings.gd"

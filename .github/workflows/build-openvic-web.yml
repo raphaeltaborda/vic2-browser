@@ -12,12 +12,15 @@ permissions:
   contents: read
 
 concurrency:
-  group: openvic-wasm-main
+  group: openvic-native-main
   cancel-in-progress: true
 
 env:
   OPENVIC_COMMIT: d3361890c62ede9464eb41af7f797e87dedf4b28
   EMSCRIPTEN_VERSION: 4.0.11
+  CCACHE_DIR: ${{ github.workspace }}/.ccache
+  CCACHE_MAXSIZE: 2G
+  CCACHE_COMPRESS: "true"
 
 jobs:
   wasm-extension:
@@ -31,7 +34,15 @@ jobs:
       - name: Install build tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y ninja-build cmake python3 pkg-config
+          sudo apt-get install -y ninja-build cmake python3 pkg-config ccache
+
+      - name: Restore wasm compiler cache
+        uses: actions/cache@v4
+        with:
+          path: .ccache
+          key: openvic-wasm-ccache-${{ runner.os }}-${{ env.EMSCRIPTEN_VERSION }}-${{ env.OPENVIC_COMMIT }}-${{ hashFiles('scripts/patch_openvic_web.py') }}
+          restore-keys: |
+            openvic-wasm-ccache-${{ runner.os }}-${{ env.EMSCRIPTEN_VERSION }}-${{ env.OPENVIC_COMMIT }}-
 
       - name: Install Emscripten matching Godot 4.7.2
         uses: emscripten-core/setup-emsdk@v16
@@ -45,6 +56,8 @@ jobs:
           em++ --version
           cmake --version
           ninja --version
+          ccache --version
+          ccache --zero-stats
 
       - name: Fetch pinned OpenVic source
         run: |
@@ -64,6 +77,8 @@ jobs:
             -B build/openvic-web \
             -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
             -DGODOTCPP_TARGET=template_release \
             -DGODOTCPP_THREADS=OFF \
             -DGODOTCPP_PRECISION=single \
@@ -94,6 +109,7 @@ jobs:
       - name: Build OpenVic WebAssembly extension
         run: |
           cmake --build build/openvic-web --target openvic --parallel 4
+          ccache --show-stats
 
       - name: Collect and validate extension
         run: |
@@ -131,4 +147,68 @@ jobs:
           name: openvic-web-extension
           path: dist/engine
           if-no-files-found: error
-          retention-days: 30
+          retention-days: 90
+
+  linux-editor-extension:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 75
+
+    steps:
+      - name: Checkout vic2-browser
+        uses: actions/checkout@v4
+
+      - name: Install native build tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build cmake python3 pkg-config libtbb-dev ccache
+
+      - name: Restore Linux editor compiler cache
+        uses: actions/cache@v4
+        with:
+          path: .ccache
+          key: openvic-linux-editor-ccache-${{ runner.os }}-${{ env.OPENVIC_COMMIT }}-${{ hashFiles('scripts/patch_openvic_web.py') }}
+          restore-keys: |
+            openvic-linux-editor-ccache-${{ runner.os }}-${{ env.OPENVIC_COMMIT }}-
+
+      - name: Fetch pinned OpenVic source
+        run: |
+          mkdir -p vendor
+          git clone --recursive https://github.com/OpenVicProject/OpenVic.git vendor/OpenVic
+          cd vendor/OpenVic
+          git checkout --detach "$OPENVIC_COMMIT"
+          git submodule update --init --recursive
+
+      - name: Apply native port patches
+        run: python3 scripts/patch_openvic_web.py
+
+      - name: Build Linux editor extension
+        working-directory: vendor/OpenVic
+        run: |
+          ccache --zero-stats
+          cmake --preset linux-x64-editor \
+            -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+            -DOPENVIC_USE_PCH=OFF \
+            -DOPENVIC_SIM_BUILD_HEADLESS=OFF \
+            -DOPENVIC_SIM_BUILD_TESTS=OFF \
+            -DOPENVIC_SIM_BUILD_BENCHMARKS=OFF
+          cmake --build --preset linux-x64-editor --parallel 4
+          ccache --show-stats
+
+      - name: Collect Linux editor extension
+        run: |
+          mkdir -p dist/editor
+          LIB="$(find vendor/OpenVic/game/bin/openvic -type f -name 'libopenvic.linux.editor.x86_64.so' | head -n 1)"
+          test -n "$LIB"
+          cp "$LIB" dist/editor/libopenvic.linux.editor.x86_64.so
+          test -s dist/editor/libopenvic.linux.editor.x86_64.so
+          file dist/editor/libopenvic.linux.editor.x86_64.so
+          ls -lh dist/editor
+
+      - name: Upload Linux editor artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: openvic-linux-editor-extension
+          path: dist/editor
+          if-no-files-found: error
+          retention-days: 90
