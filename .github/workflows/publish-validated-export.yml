@@ -1,0 +1,61 @@
+name: Publish validated native Web export
+
+on:
+  workflow_run:
+    workflows:
+      - Validate Godot Web export
+    types:
+      - completed
+
+permissions:
+  contents: read
+  actions: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: validated-native-pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-24.04
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - name: Download validated Godot Web export
+        uses: actions/download-artifact@v4
+        with:
+          name: godot-web-export-smoke
+          path: site
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: ${{ github.event.workflow_run.id }}
+
+      - name: Verify native runtime files
+        run: |
+          test -s site/index.html
+          test -s site/index.js
+          test -s site/index.wasm
+          test -s site/index.side.wasm
+          test -s site/index.pck
+          OPENVIC_WASM="$(find site -type f -name 'libopenvic*.wasm' | head -n 1)"
+          test -n "$OPENVIC_WASM"
+          test -s "$OPENVIC_WASM"
+          grep -Fqi 'openvic' site/index.html
+          echo "Validated export ready for Pages:"
+          find site -maxdepth 1 -type f -printf "%f %k KB\n" | sort
+
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload GitHub Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+      - name: Deploy native test page
+        id: deployment
+        uses: actions/deploy-pages@v4
