@@ -1,40 +1,59 @@
-# vic2-browser
+# Victoria II Browser — native Web port
 
-Private browser-based Victoria II experiment.
+This repository is an experimental **native web port** of a Victoria II-compatible engine.
 
-## Goal
+## Non-negotiable design rule
 
-Run a legitimate personal copy of Victoria II from private cloud storage in a modern web browser, without requiring Victoria II to be installed on the computer being used.
+**No Victoria II game files are hosted or committed here.**
 
-## Current direction
+The web client requires the player to supply their own legitimate Victoria II installation locally. Proprietary Paradox files are read in the browser and are not part of the public GitHub repository or GitHub Pages deployment.
 
-The project will first try to run the original Windows game through a WebAssembly compatibility layer (BoxedWine/Wine) rather than reimplementing the Clausewitz engine.
-
-Planned flow:
+## Architecture
 
 ```text
 Browser
-  ↓
-vic2-browser frontend
-  ↓
-BoxedWine / WebAssembly
-  ↓
-Private cloud game image
-  ↓
-Victoria II.exe
+  ├─ HTML / JavaScript loader
+  ├─ Godot Web runtime (WebAssembly)
+  ├─ OpenVic GDExtension (WebAssembly)
+  └─ User-supplied legitimate Victoria II data
+       ├─ common/
+       ├─ history/
+       ├─ map/
+       ├─ localisation/
+       ├─ events/
+       ├─ decisions/
+       ├─ gfx/
+       └─ other required game data
 ```
 
-Game files and other proprietary Victoria II assets must not be committed to this public repository.
+There is **no Wine, BoxedWine, x86 emulation, or Windows executable execution** in the final architecture.
 
-## Milestones
+## Upstream engine
 
-1. Boot a simple Windows executable in BoxedWine/WebAssembly.
-2. Prepare private cloud storage for the owner's Victoria II installation.
-3. Load the private game image from the browser.
-4. Launch Victoria II.
-5. Add persistent saves and browser-side caching.
-6. Improve loading time, fullscreen, audio and input.
+The port is based on OpenVic/OpenVic-Simulation, pinned while porting to:
 
-## Status
+- OpenVic: `d3361890c62ede9464eb41af7f797e87dedf4b28`
 
-Early proof of concept. GitHub Pages deployment enabled.
+OpenVic is intended to faithfully recreate Victoria II: Heart of Darkness and supports loading Victoria II data for legitimate owners.
+
+## Current build milestone
+
+The build job compiles the OpenVic C++ GDExtension as a native WebAssembly side module:
+
+```text
+OpenVic C++ -> Emscripten -> libopenvic.web.template_release.wasm32.nothreads.wasm
+```
+
+The first browser target is intentionally single-threaded to maximize Brave/Chromium compatibility and avoid making SharedArrayBuffer a prerequisite.
+
+## Copyright boundary
+
+Do **not** commit or deploy:
+
+- `v2game.exe`
+- `victoria2.exe`
+- Victoria II game directories/assets
+- Steam depots
+- user-provided ZIPs
+
+Only original port code, build scripts, and redistributable open-source dependencies belong in this repository.
