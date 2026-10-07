@@ -177,3 +177,12 @@ test('Web boot defers sound effects instead of aborting on sound.sfx', () => {
   assert.match(block[1], /return true;\n#else/);
   assert.match(block[1], /sound_effect_manager\.load_sound_defines_file/);
 });
+
+
+test('WASM diagnostics include assertions and stack overflow checks', () => {
+  const portPatch = fs.readFileSync('scripts/patch_openvic_web.py', 'utf8');
+  assert.match(portPatch, /-sASSERTIONS=2/);
+  assert.match(portPatch, /-sSTACK_OVERFLOW_CHECK=2/);
+  assert.match(portPatch, /target_compile_options\([\s\S]*?-g2/);
+  assert.match(portPatch, /target_link_options\([\s\S]*?-g2/);
+});

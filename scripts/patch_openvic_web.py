@@ -47,12 +47,20 @@ if platform_block not in text:
 target_line = "add_library(openvic SHARED ${openvic_sources})\n"
 target_replacement = """if(CMAKE_SYSTEM_NAME STREQUAL "Emscripten")
     add_executable(openvic ${openvic_sources})
+    target_compile_options(
+        openvic
+        PRIVATE
+            -g2
+    )
     target_link_options(
         openvic
         PRIVATE
             -sSIDE_MODULE=1
             -sWASM_BIGINT
             -sSUPPORT_LONGJMP=wasm
+            -sASSERTIONS=2
+            -sSTACK_OVERFLOW_CHECK=2
+            -g2
             -pthread
             -fvisibility=hidden
             -shared
