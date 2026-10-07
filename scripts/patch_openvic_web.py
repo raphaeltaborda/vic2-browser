@@ -34,8 +34,8 @@ elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     set(OV_OUTPUT_NAME "openvic.linux.${GODOTCPP_TARGET}.${OV_ARCH}")
 elseif(CMAKE_SYSTEM_NAME STREQUAL "Emscripten")
     # Godot Web GDExtensions are Emscripten SIDE_MODULEs.
-    # This port deliberately starts without pthreads for maximum browser compatibility.
-    set(OV_OUTPUT_NAME "libopenvic.web.${GODOTCPP_TARGET}.wasm32.nothreads")
+    # The browser target uses pthreads so Victoria II parsing runs off the UI thread.
+    set(OV_OUTPUT_NAME "libopenvic.web.${GODOTCPP_TARGET}.wasm32.threads")
     set_target_properties(openvic PROPERTIES SUFFIX ".wasm")
 else()
     message(FATAL_ERROR "Unsupported platform: ${CMAKE_SYSTEM_NAME}")
@@ -53,6 +53,7 @@ target_replacement = """if(CMAKE_SYSTEM_NAME STREQUAL "Emscripten")
             -sSIDE_MODULE=1
             -sWASM_BIGINT
             -sSUPPORT_LONGJMP=wasm
+            -pthread
             -fvisibility=hidden
             -shared
     )
@@ -73,8 +74,8 @@ gtext = gdext.read_text(encoding="utf-8")
 marker = '[libraries]\n\n'
 addition = (
     '[libraries]\n\n'
-    'web.wasm32.single.release = "res://bin/openvic/libopenvic.web.template_release.wasm32.nothreads.wasm"\n'
-    'web.wasm32.single.debug = "res://bin/openvic/libopenvic.web.template_debug.wasm32.nothreads.wasm"\n'
+    'web.wasm32.single.release = "res://bin/openvic/libopenvic.web.template_release.wasm32.threads.wasm"\n'
+    'web.wasm32.single.debug = "res://bin/openvic/libopenvic.web.template_debug.wasm32.threads.wasm"\n'
 )
 if 'web.wasm32.single.release' not in gtext:
     if marker not in gtext:
@@ -82,15 +83,14 @@ if 'web.wasm32.single.release' not in gtext:
     gtext = gtext.replace(marker, addition, 1)
     gdext.write_text(gtext, encoding="utf-8")
 
-print("OpenVic patched for wasm32/nothreads.")
+print("OpenVic patched for wasm32/threads.")
 
 
 # ---------------------------------------------------------------------------
-# Single-thread WebAssembly runtime patches
+# WebAssembly fallback patches
 # ---------------------------------------------------------------------------
-# Emscripten builds without -pthread can compile std::thread declarations, but
-# they cannot spawn workers at runtime. Keep the simulation deterministic by
-# executing the same work bundles serially in the browser.
+# Keep the serial fallback available for a future no-pthreads Web build, while
+# allowing the primary pthread build to use OpenVic's normal worker pools.
 
 sim = OPENVIC / "extension" / "deps" / "openvic-simulation"
 
@@ -208,8 +208,8 @@ ecs_ctor = """EcsThreadPool::EcsThreadPool(uint32_t worker_count) {
 \t}
 }"""
 ecs_web_ctor = """EcsThreadPool::EcsThreadPool(uint32_t worker_count) {
-#ifdef __EMSCRIPTEN__
-\t// The Web target intentionally has no pthreads. An empty worker vector makes
+#if defined(__EMSCRIPTEN__) && !defined(__EMSCRIPTEN_PTHREADS__)
+\t// The no-pthreads Web fallback uses an empty worker vector so
 \t// parallel_for/run_concurrent take their existing serial fast paths.
 \t(void)worker_count;
 #else
@@ -233,7 +233,7 @@ hpp_anchor = """\t\tbool is_cancellation_requested = false;
 hpp_replacement = """\t\tbool is_cancellation_requested = false;
 \t\tDate const& current_date;
 
-#ifdef __EMSCRIPTEN__
+#if defined(__EMSCRIPTEN__) && !defined(__EMSCRIPTEN_PTHREADS__)
 \t\tGameRulesManager const* web_game_rules_manager = nullptr;
 \t\tGoodInstanceManager const* web_good_instance_manager = nullptr;
 \t\tModifierEffectCache const* web_modifier_effect_cache = nullptr;
@@ -273,7 +273,7 @@ process_old = """void ThreadPool::process_work(const work_t work_type) {
 \tawait_completion();
 }"""
 
-process_new = """#ifdef __EMSCRIPTEN__
+process_new = """#if defined(__EMSCRIPTEN__) && !defined(__EMSCRIPTEN_PTHREADS__)
 void ThreadPool::process_work_serial(const work_t work_type) {
 \tif (
 \t\tweb_game_rules_manager == nullptr ||
@@ -375,7 +375,7 @@ void ThreadPool::process_work_serial(const work_t work_type) {
 #endif
 
 void ThreadPool::process_work(const work_t work_type) {
-#ifdef __EMSCRIPTEN__
+#if defined(__EMSCRIPTEN__) && !defined(__EMSCRIPTEN_PTHREADS__)
 \tprocess_work_serial(work_type);
 \treturn;
 #else
@@ -407,7 +407,7 @@ spawn_anchor = """\tconst std::size_t max_worker_threads = std::min(
 \t\tWORK_BUNDLE_COUNT
 \t);"""
 
-spawn_replacement = """#ifdef __EMSCRIPTEN__
+spawn_replacement = """#if defined(__EMSCRIPTEN__) && !defined(__EMSCRIPTEN_PTHREADS__)
 \t// Preserve the exact deterministic work-bundle partitioning above, but do
 \t// not create pthreads in the no-threads Web build. process_work_serial()
 \t// executes these same bundles on the browser's single Wasm thread.

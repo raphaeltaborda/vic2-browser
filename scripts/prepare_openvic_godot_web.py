@@ -36,31 +36,8 @@ for function in ("_init", "_ready"):
         w = w.replace(needle, replacement, 1)
 window.write_text(w, encoding="utf-8")
 
-# The loading screen normally executes game initialization on a Godot Thread.
-# The first Web target intentionally has thread_support=false, so execute the
-# exact same Callable on the main Wasm thread instead.
-loading = GAME / "src/Systems/Startup/LoadingScreen.gd"
-l = loading.read_text(encoding="utf-8")
-l = l.replace(
-    "\tthread = Thread.new()\n",
-    '\tif not OS.has_feature("web"):\n\t\tthread = Thread.new()\n',
-    1
-)
-thread_start = "\tthread.start(thread_safe_function)\n"
-web_start = (
-    '\tif OS.has_feature("web"):\n'
-    '\t\t# Wait until a frame has actually been presented. call_deferred() alone can\n'
-    '\t\t# still run before drawing and leave the browser black during heavy parsing.\n'
-    '\t\tawait RenderingServer.frame_post_draw\n'
-    '\t\tthread_safe_function.call()\n'
-    '\telse:\n'
-    '\t\tthread.start(thread_safe_function)\n'
-)
-if web_start not in l:
-    if thread_start not in l:
-        raise SystemExit("LoadingScreen.gd thread start layout changed")
-    l = l.replace(thread_start, web_start, 1)
-loading.write_text(l, encoding="utf-8")
+# Keep OpenVic's original LoadingScreen Thread on Web. The threaded Godot/Emscripten
+# target lets Victoria II compatibility parsing run without freezing browser UI.
 
 # The desktop startup scene is covered by an autoplay .ogv splash while the
 # loading screen starts hidden. Browser autoplay/video support can leave that
@@ -77,6 +54,7 @@ web_ready = (
     + '\t\t\tsplash.hide()\n'
     + '\t\t\tsplash.queue_free()\n'
     + '\t\tloading_screen.show()\n'
+    + '\t\tprint("[Web] Loading screen visible; preparing Victoria II compatibility path.")\n'
 )
 if web_ready not in gs:
     if ready not in gs:
@@ -139,7 +117,7 @@ script_export_mode=2
 custom_template/debug=""
 custom_template/release=""
 variant/extensions_support=true
-variant/thread_support=false
+variant/thread_support=true
 vram_texture_compression/for_desktop=true
 vram_texture_compression/for_mobile=false
 html/export_icon=true
@@ -148,7 +126,16 @@ html/head_include=""
 html/canvas_resize_policy=2
 html/focus_canvas_on_start=true
 html/experimental_virtual_keyboard=false
-progressive_web_app/enabled=false
+progressive_web_app/enabled=true
+progressive_web_app/ensure_cross_origin_isolation_headers=true
+progressive_web_app/display=3
+progressive_web_app/orientation=0
+progressive_web_app/icon_144x144=""
+progressive_web_app/icon_180x180=""
+progressive_web_app/icon_512x512=""
+progressive_web_app/background_color=Color(0.05098, 0.06275, 0.07843, 1)
+threads/emscripten_pool_size=8
+threads/godot_pool_size=4
 '''
 presets.write_text(p, encoding="utf-8")
 

@@ -108,7 +108,7 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
 
-          wasm = Path("engine-artifact/libopenvic.web.template_release.wasm32.nothreads.wasm")
+          wasm = Path("engine-artifact/libopenvic.web.template_release.wasm32.threads.wasm")
           magic = wasm.read_bytes()[:8]
           print("OpenVic artifact magic:", magic)
           if magic[:4].hex() != "0061736d":
@@ -141,9 +141,9 @@ jobs:
       - name: Install reusable native extensions into project
         run: |
           mkdir -p vendor/OpenVic/game/bin/openvic
-          cp engine-artifact/libopenvic.web.template_release.wasm32.nothreads.wasm vendor/OpenVic/game/bin/openvic/
+          cp engine-artifact/libopenvic.web.template_release.wasm32.threads.wasm vendor/OpenVic/game/bin/openvic/
           cp editor-artifact/libopenvic.linux.editor.x86_64.so vendor/OpenVic/game/bin/openvic/
-          test -s vendor/OpenVic/game/bin/openvic/libopenvic.web.template_release.wasm32.nothreads.wasm
+          test -s vendor/OpenVic/game/bin/openvic/libopenvic.web.template_release.wasm32.threads.wasm
           test -s vendor/OpenVic/game/bin/openvic/libopenvic.linux.editor.x86_64.so
           grep -F 'web.wasm32.single.release' vendor/OpenVic/game/bin/openvic.gdextension
 
@@ -167,11 +167,11 @@ jobs:
             https://github.com/godotengine/godot/releases/download/4.7.2-stable/Godot_v4.7.2-stable_export_templates.tpz \
             -o /tmp/godot-export-templates.tpz
 
-          ENTRY="$(unzip -Z1 /tmp/godot-export-templates.tpz | grep 'web_dlink_nothreads_release.zip$' | head -n 1)"
+          ENTRY="$(unzip -Z1 /tmp/godot-export-templates.tpz | grep 'web_dlink_release.zip$' | head -n 1)"
           test -n "$ENTRY"
-          unzip -p /tmp/godot-export-templates.tpz "$ENTRY" > "$TEMPLATE_ROOT/web_dlink_nothreads_release.zip"
-          test -s "$TEMPLATE_ROOT/web_dlink_nothreads_release.zip"
-          unzip -t "$TEMPLATE_ROOT/web_dlink_nothreads_release.zip"
+          unzip -p /tmp/godot-export-templates.tpz "$ENTRY" > "$TEMPLATE_ROOT/web_dlink_release.zip"
+          test -s "$TEMPLATE_ROOT/web_dlink_release.zip"
+          unzip -t "$TEMPLATE_ROOT/web_dlink_release.zip"
           rm -f /tmp/godot-export-templates.tpz
 
       - name: Import project
@@ -188,7 +188,9 @@ jobs:
           test -s dist/site/index.wasm
           test -s dist/site/index.side.wasm
           test -s dist/site/index.pck
-          test -s dist/site/libopenvic.web.template_release.wasm32.nothreads.wasm
+          test -s dist/site/libopenvic.web.template_release.wasm32.threads.wasm
+          test -s dist/site/index.service.worker.js
+          test -s dist/site/index.manifest.json
           grep -F "Confirmo que os arquivos selecionados pertencem a uma cópia legítima" dist/site/index.html
 
       - name: Upload export for inspection
@@ -207,7 +209,22 @@ jobs:
           test -n "$CHROME"
           export CHROME
 
-          python3 -m http.server 8765 --directory dist/site >/tmp/openvic-http.log 2>&1 &
+          cat >/tmp/serve_openvic.py <<'PYHTTP'
+          from http.server import ThreadingHTTPServer, SimpleHTTPRequestHandler
+          from functools import partial
+
+          class Handler(SimpleHTTPRequestHandler):
+              def end_headers(self):
+                  self.send_header("Cross-Origin-Opener-Policy", "same-origin")
+                  self.send_header("Cross-Origin-Embedder-Policy", "require-corp")
+                  super().end_headers()
+
+          ThreadingHTTPServer(
+              ("127.0.0.1", 8765),
+              partial(Handler, directory="dist/site"),
+          ).serve_forever()
+          PYHTTP
+          python3 /tmp/serve_openvic.py >/tmp/openvic-http.log 2>&1 &
           SERVER_PID=$!
           trap 'kill "$SERVER_PID" 2>/dev/null || true' EXIT
 
@@ -230,6 +247,10 @@ jobs:
                   page.on("pageerror", lambda exc: console_lines.append(f"[pageerror] {exc}"))
 
                   await page.goto("http://127.0.0.1:8765/", wait_until="domcontentloaded", timeout=30_000)
+                  isolated = await page.evaluate("crossOriginIsolated")
+                  print("crossOriginIsolated:", isolated)
+                  if not isolated:
+                      raise SystemExit("Threaded Web smoke test is not cross-origin isolated.")
 
                   deadline = time.monotonic() + 120
                   last = None

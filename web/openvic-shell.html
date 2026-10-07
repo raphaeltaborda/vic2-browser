@@ -152,10 +152,45 @@
       }
     }
 
+    async function ensureThreadIsolation() {
+      if (!GODOT_THREADS_ENABLED || globalThis.crossOriginIsolated) {
+        sessionStorage.removeItem('vic2-thread-bootstrap');
+        return true;
+      }
+
+      const serviceWorker = GODOT_CONFIG.serviceWorker;
+      if (!serviceWorker || !('serviceWorker' in navigator)) {
+        throw new Error(
+          'O build threaded precisa de cross-origin isolation, mas o navegador não oferece Service Worker para ativá-la.'
+        );
+      }
+
+      setState(godotState, 'pending', 'ativando threads…');
+      setState(openvicState, 'pending', 'aguardando isolamento…');
+      log('Registrando Service Worker oficial do Godot para COOP/COEP: ' + serviceWorker);
+
+      await navigator.serviceWorker.register(serviceWorker);
+      await navigator.serviceWorker.ready;
+
+      const attempts = Number(sessionStorage.getItem('vic2-thread-bootstrap') || '0');
+      if (attempts < 2) {
+        sessionStorage.setItem('vic2-thread-bootstrap', String(attempts + 1));
+        location.reload();
+        return false;
+      }
+
+      throw new Error(
+        'O navegador não ativou crossOriginIsolated após registrar o Service Worker. ' +
+        'Feche outras abas desta página e recarregue.'
+      );
+    }
+
     async function initializeEngine() {
       try {
         await clearLegacyServiceWorker();
+        if (!(await ensureThreadIsolation())) return;
 
+        log('Threaded Web runtime: crossOriginIsolated=' + globalThis.crossOriginIsolated);
         const missing = Engine.getMissingFeatures({ threads: GODOT_THREADS_ENABLED });
         if (missing.length) throw new Error('Recursos ausentes no navegador: ' + missing.join(', '));
 
@@ -346,14 +381,12 @@
         status.textContent = 'Dados montados. Abrindo OpenVic…';
         log('Executando OpenVic com --base-path=/vic2.');
 
-        // Make the rendering surface visible before callMain(). OpenVic performs
-        // its compatibility-data load synchronously on the first no-threads Web
-        // build, so waiting to reveal the canvas until engine.start() resolves
-        // can leave the launcher apparently frozen at 100%.
+        // Reveal the canvas before callMain(). The threaded Web build keeps
+        // Victoria II parsing off the browser UI thread so loading remains responsive.
         launcher.style.display = 'none';
         canvas.style.display = 'block';
         runtimeStatus.classList.remove('error');
-        runtimeStatus.textContent = 'OpenVic iniciou · preparando a tela de carregamento…';
+        runtimeStatus.textContent = 'OpenVic iniciou · carregando Victoria II em thread dedicada…';
         runtimeStatus.style.display = 'block';
         canvas.focus();
         await new Promise(requestAnimationFrame);

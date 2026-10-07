@@ -41,6 +41,8 @@ jobs:
           test -s site/index.wasm
           test -s site/index.side.wasm
           test -s site/index.pck
+          test -s site/index.service.worker.js
+          test -s site/index.manifest.json
           OPENVIC_WASM="$(find site -type f -name 'libopenvic*.wasm' | head -n 1)"
           test -n "$OPENVIC_WASM"
           test -s "$OPENVIC_WASM"

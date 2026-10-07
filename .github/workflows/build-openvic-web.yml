@@ -40,9 +40,9 @@ jobs:
         uses: actions/cache@v4
         with:
           path: .ccache
-          key: openvic-wasm-ccache-${{ runner.os }}-${{ env.EMSCRIPTEN_VERSION }}-${{ env.OPENVIC_COMMIT }}-${{ hashFiles('scripts/patch_openvic_web.py') }}
+          key: openvic-wasm-threads-ccache-${{ runner.os }}-${{ env.EMSCRIPTEN_VERSION }}-${{ env.OPENVIC_COMMIT }}-${{ hashFiles('scripts/patch_openvic_web.py') }}
           restore-keys: |
-            openvic-wasm-ccache-${{ runner.os }}-${{ env.EMSCRIPTEN_VERSION }}-${{ env.OPENVIC_COMMIT }}-
+            openvic-wasm-threads-ccache-${{ runner.os }}-${{ env.EMSCRIPTEN_VERSION }}-${{ env.OPENVIC_COMMIT }}-
 
       - name: Install Emscripten matching Godot 4.7.2
         uses: emscripten-core/setup-emsdk@v16
@@ -69,7 +69,7 @@ jobs:
       - name: Apply WebAssembly port patches
         run: python3 scripts/patch_openvic_web.py
 
-      - name: Configure OpenVic for wasm32 single-thread
+      - name: Configure OpenVic for wasm32 pthreads
         run: |
           emcmake cmake \
             -S vendor/OpenVic \
@@ -79,7 +79,9 @@ jobs:
             -DCMAKE_C_COMPILER_LAUNCHER=ccache \
             -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
             -DGODOTCPP_TARGET=template_release \
-            -DGODOTCPP_THREADS=OFF \
+            -DGODOTCPP_THREADS=ON \
+            -DCMAKE_C_FLAGS=-pthread \
+            -DCMAKE_CXX_FLAGS=-pthread \
             -DGODOTCPP_PRECISION=single \
             -DOPENVIC_USE_PCH=OFF \
             -DOPENVIC_SIM_BUILD_HEADLESS=OFF \
@@ -116,18 +118,18 @@ jobs:
           WASM="$(find build/openvic-web -type f -name 'libopenvic*.wasm' | head -n 1)"
           test -n "$WASM"
 
-          cp "$WASM" dist/engine/libopenvic.web.template_release.wasm32.nothreads.wasm
+          cp "$WASM" dist/engine/libopenvic.web.template_release.wasm32.threads.wasm
           cp vendor/OpenVic/game/bin/openvic.gdextension dist/engine/openvic.gdextension
           printf '%s\n' "$OPENVIC_COMMIT" > dist/engine/OPENVIC_COMMIT
           printf '%s\n' "$EMSCRIPTEN_VERSION" > dist/engine/EMSCRIPTEN_VERSION
 
-          test -s dist/engine/libopenvic.web.template_release.wasm32.nothreads.wasm
+          test -s dist/engine/libopenvic.web.template_release.wasm32.threads.wasm
           grep -Fq 'web.wasm32.single.release' dist/engine/openvic.gdextension
 
           python3 - <<'PY'
           from pathlib import Path
 
-          wasm = Path("dist/engine/libopenvic.web.template_release.wasm32.nothreads.wasm")
+          wasm = Path("dist/engine/libopenvic.web.template_release.wasm32.threads.wasm")
           magic = wasm.read_bytes()[:8]
           print("OpenVic artifact magic:", magic)
           if magic[:4].hex() != "0061736d":
@@ -137,7 +139,7 @@ jobs:
               )
           PY
 
-          file dist/engine/libopenvic.web.template_release.wasm32.nothreads.wasm
+          file dist/engine/libopenvic.web.template_release.wasm32.threads.wasm
           ls -lh dist/engine
 
       - name: Upload WebAssembly engine artifact
