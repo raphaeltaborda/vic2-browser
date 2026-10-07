@@ -49,9 +49,10 @@ l = l.replace(
 thread_start = "\tthread.start(thread_safe_function)\n"
 web_start = (
     '\tif OS.has_feature("web"):\n'
-    '\t\t# Defer one frame so the browser can reveal the Godot canvas/loading screen\n'
-    '\t\t# before the no-threads compatibility-data load blocks the main Wasm thread.\n'
-    '\t\tthread_safe_function.call_deferred()\n'
+    '\t\t# Wait until a frame has actually been presented. call_deferred() alone can\n'
+    '\t\t# still run before drawing and leave the browser black during heavy parsing.\n'
+    '\t\tawait RenderingServer.frame_post_draw\n'
+    '\t\tthread_safe_function.call()\n'
     '\telse:\n'
     '\t\tthread.start(thread_safe_function)\n'
 )
