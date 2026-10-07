@@ -1,4 +1,4 @@
-name: Build and deploy native Victoria II Web port
+name: Build OpenVic Web port
 
 on:
   push:
@@ -6,26 +6,19 @@ on:
     paths:
       - ".github/workflows/build-openvic-web.yml"
       - "scripts/patch_openvic_web.py"
-      - "scripts/prepare_openvic_godot_web.py"
-      - "web/openvic-shell.html"
   workflow_dispatch:
 
 permissions:
   contents: read
-  pages: write
-  id-token: write
 
-concurrency:
-  group: "native-vic2-pages-${{ github.sha }}"
-  cancel-in-progress: false
+env:
+  OPENVIC_COMMIT: d3361890c62ede9464eb41af7f797e87dedf4b28
+  EMSCRIPTEN_VERSION: 4.0.11
 
 jobs:
-  build-export-deploy:
+  wasm-extension:
     runs-on: ubuntu-24.04
-    timeout-minutes: 90
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+    timeout-minutes: 75
 
     steps:
       - name: Checkout vic2-browser
@@ -34,12 +27,12 @@ jobs:
       - name: Install build tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y ninja-build cmake python3 python3-pip pkg-config libtbb-dev unzip
+          sudo apt-get install -y ninja-build cmake python3 pkg-config
 
-      - name: Install Emscripten used by Godot 4.7.2
+      - name: Install Emscripten matching Godot 4.7.2
         uses: emscripten-core/setup-emsdk@v16
         with:
-          version: 4.0.11
+          version: ${{ env.EMSCRIPTEN_VERSION }}
           no-cache: true
 
       - name: Verify toolchain
@@ -54,189 +47,70 @@ jobs:
           mkdir -p vendor
           git clone --recursive https://github.com/OpenVicProject/OpenVic.git vendor/OpenVic
           cd vendor/OpenVic
-          git checkout --detach d3361890c62ede9464eb41af7f797e87dedf4b28
+          git checkout --detach "$OPENVIC_COMMIT"
           git submodule update --init --recursive
 
-      - name: Apply native WebAssembly port patches
+      - name: Apply WebAssembly port patches
         run: python3 scripts/patch_openvic_web.py
 
-      - name: Configure OpenVic GDExtension for wasm32 single-thread
-        run: emcmake cmake -S vendor/OpenVic -B build/openvic-web -G Ninja -DCMAKE_BUILD_TYPE=Release -DGODOTCPP_TARGET=template_release -DGODOTCPP_THREADS=OFF -DGODOTCPP_PRECISION=single -DOPENVIC_USE_PCH=OFF -DOPENVIC_SIM_BUILD_HEADLESS=OFF -DOPENVIC_SIM_BUILD_TESTS=OFF -DOPENVIC_SIM_BUILD_BENCHMARKS=OFF
+      - name: Configure OpenVic for wasm32 single-thread
+        run: |
+          emcmake cmake \
+            -S vendor/OpenVic \
+            -B build/openvic-web \
+            -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DGODOTCPP_TARGET=template_release \
+            -DGODOTCPP_THREADS=OFF \
+            -DGODOTCPP_PRECISION=single \
+            -DOPENVIC_USE_PCH=OFF \
+            -DOPENVIC_SIM_BUILD_HEADLESS=OFF \
+            -DOPENVIC_SIM_BUILD_TESTS=OFF \
+            -DOPENVIC_SIM_BUILD_BENCHMARKS=OFF
 
       - name: Patch legacy foonathan-memory libc++ ABI references
         run: |
           python3 - <<'PY'
           from pathlib import Path
+
           root = Path("build/openvic-web/_deps/memory-src")
           changed = 0
           for path in root.rglob("*.hpp"):
-              text = path.read_text(encoding="utf-8")
-              if "std::__1::" in text:
-                  path.write_text(text.replace("std::__1::", "std::_LIBCPP_ABI_NAMESPACE::"), encoding="utf-8")
-                  changed += 1
-          print(f"Patched {changed} foonathan-memory header(s)")
+              source = path.read_text(encoding="utf-8")
+              if "std::__1::" not in source:
+                  continue
+              path.write_text(
+                  source.replace("std::__1::", "std::_LIBCPP_ABI_NAMESPACE::"),
+                  encoding="utf-8",
+              )
+              changed += 1
+          print(f"Patched {changed} foonathan-memory header(s).")
           PY
 
-      - name: Build native OpenVic WebAssembly extension
+      - name: Build OpenVic WebAssembly extension
         run: |
           cmake --build build/openvic-web --target openvic --parallel 4
-          find build/openvic-web -type f -name "libopenvic*.wasm" -printf "%p %k KB\n"
 
-      - name: Collect native wasm engine
+      - name: Collect and validate extension
         run: |
           mkdir -p dist/engine
           WASM="$(find build/openvic-web -type f -name 'libopenvic*.wasm' | head -n 1)"
           test -n "$WASM"
+
           cp "$WASM" dist/engine/libopenvic.web.template_release.wasm32.nothreads.wasm
           cp vendor/OpenVic/game/bin/openvic.gdextension dist/engine/openvic.gdextension
-          printf '%s\n' 'd3361890c62ede9464eb41af7f797e87dedf4b28' > dist/engine/OPENVIC_COMMIT
-          printf '%s\n' '4.0.11' > dist/engine/EMSCRIPTEN_VERSION
+          printf '%s\n' "$OPENVIC_COMMIT" > dist/engine/OPENVIC_COMMIT
+          printf '%s\n' "$EMSCRIPTEN_VERSION" > dist/engine/EMSCRIPTEN_VERSION
+
           test -s dist/engine/libopenvic.web.template_release.wasm32.nothreads.wasm
           grep -Fq 'web.wasm32.single.release' dist/engine/openvic.gdextension
           file dist/engine/libopenvic.web.template_release.wasm32.nothreads.wasm
           ls -lh dist/engine
 
-      - name: Upload engine artifact
+      - name: Upload WebAssembly engine artifact
         uses: actions/upload-artifact@v4
         with:
           name: openvic-web-extension
           path: dist/engine
           if-no-files-found: error
-
-      - name: Prepare OpenVic Godot project for Web
-        run: python3 scripts/prepare_openvic_godot_web.py
-
-      - name: Build temporary Linux extension for Godot editor import
-        working-directory: vendor/OpenVic
-        run: |
-          cmake --preset linux-x64-editor -DOPENVIC_USE_PCH=OFF -DOPENVIC_SIM_BUILD_HEADLESS=OFF -DOPENVIC_SIM_BUILD_TESTS=OFF -DOPENVIC_SIM_BUILD_BENCHMARKS=OFF
-          cmake --build --preset linux-x64-editor --parallel 4
-
-      - name: Install WebAssembly extension into Godot project
-        run: |
-          mkdir -p vendor/OpenVic/game/bin/openvic
-          cp dist/engine/libopenvic.web.template_release.wasm32.nothreads.wasm vendor/OpenVic/game/bin/openvic/
-          cp dist/engine/openvic.gdextension vendor/OpenVic/game/bin/openvic.gdextension
-          test -f vendor/OpenVic/game/bin/openvic.gdextension
-          grep -F 'web.wasm32.single.release' vendor/OpenVic/game/bin/openvic.gdextension
-          ls -lh vendor/OpenVic/game/bin/openvic.gdextension
-          ls -lh vendor/OpenVic/game/bin/openvic
-
-      - name: Download Godot 4.7.2 Linux editor
-        run: |
-          curl -L --fail --retry 3 https://github.com/godotengine/godot/releases/download/4.7.2-stable/Godot_v4.7.2-stable_linux.x86_64.zip -o /tmp/godot.zip
-          mkdir -p /tmp/godot
-          unzip -q /tmp/godot.zip -d /tmp/godot
-          GODOT="$(find /tmp/godot -maxdepth 1 -type f -name 'Godot*' | head -n 1)"
-          test -n "$GODOT"
-          chmod +x "$GODOT"
-          echo "GODOT=$GODOT" >> "$GITHUB_ENV"
-          "$GODOT" --version
-
-      - name: Fetch official Web GDExtension single-thread template
-        run: |
-          TEMPLATE_ROOT="$HOME/.local/share/godot/export_templates/4.7.2.stable"
-          mkdir -p "$TEMPLATE_ROOT"
-
-          curl -L --fail --retry 3 \
-            https://github.com/godotengine/godot/releases/download/4.7.2-stable/Godot_v4.7.2-stable_export_templates.tpz \
-            -o /tmp/godot-export-templates.tpz
-
-          ENTRY="$(unzip -Z1 /tmp/godot-export-templates.tpz | grep 'web_dlink_nothreads_release.zip
-
-      - name: Import Godot project
-        run: |
-          "$GODOT" --headless --path vendor/OpenVic/game --import
-
-      - name: Export browser-native Victoria II client
-        run: |
-          mkdir -p dist/site
-          "$GODOT" --headless --path vendor/OpenVic/game --export-release "Web" "$GITHUB_WORKSPACE/dist/site/index.html"
-          echo "=== Web export ==="
-          find dist/site -maxdepth 1 -type f -printf "%f %k KB\n" | sort
-
-      - name: Validate published native runtime
-        run: |
-          test -s dist/site/index.html
-          test -s dist/site/index.js
-          test -s dist/site/index.wasm
-          test -s dist/site/index.side.wasm
-          test -s dist/site/index.pck
-          OPENVIC_WASM="$(find dist/site -type f -name 'libopenvic*.wasm' | head -n 1)"
-          test -n "$OPENVIC_WASM"
-          test -s "$OPENVIC_WASM"
-          grep -Fq 'gdextensionLibs' dist/site/index.html
-          grep -Fqi 'openvic' dist/site/index.html
-          test ! -e dist/site/v2game.exe
-          test ! -e dist/site/victoria2.exe
-          if find dist/site -type f \( -iname 'provinces.bmp' -o -iname 'definition.csv' \) | grep -q .; then
-            echo "ERROR: proprietary Victoria II data entered the public site artifact"
-            exit 1
-          fi
-          file dist/site/index.wasm
-          file dist/site/index.side.wasm
-          file "$OPENVIC_WASM"
-
-      - name: Configure GitHub Pages
-        uses: actions/configure-pages@v5
-
-      - name: Upload native site artifact
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: dist/site
-
-      - name: Deploy native site
-        id: deployment
-        uses: actions/deploy-pages@v4
- | head -n 1)"
-          test -n "$ENTRY"
-          unzip -p /tmp/godot-export-templates.tpz "$ENTRY" > "$TEMPLATE_ROOT/web_dlink_nothreads_release.zip"
-          test -s "$TEMPLATE_ROOT/web_dlink_nothreads_release.zip"
-          unzip -t "$TEMPLATE_ROOT/web_dlink_nothreads_release.zip"
-          ls -lh "$TEMPLATE_ROOT/web_dlink_nothreads_release.zip"
-          rm -f /tmp/godot-export-templates.tpz
-
-      - name: Import Godot project
-        run: |
-          "$GODOT" --headless --path vendor/OpenVic/game --import
-
-      - name: Export browser-native Victoria II client
-        run: |
-          mkdir -p dist/site
-          "$GODOT" --headless --path vendor/OpenVic/game --export-release "Web" "$GITHUB_WORKSPACE/dist/site/index.html"
-          echo "=== Web export ==="
-          find dist/site -maxdepth 1 -type f -printf "%f %k KB\n" | sort
-
-      - name: Validate published native runtime
-        run: |
-          test -s dist/site/index.html
-          test -s dist/site/index.js
-          test -s dist/site/index.wasm
-          test -s dist/site/index.side.wasm
-          test -s dist/site/index.pck
-          OPENVIC_WASM="$(find dist/site -type f -name 'libopenvic*.wasm' | head -n 1)"
-          test -n "$OPENVIC_WASM"
-          test -s "$OPENVIC_WASM"
-          grep -Fq 'gdextensionLibs' dist/site/index.html
-          grep -Fqi 'openvic' dist/site/index.html
-          test ! -e dist/site/v2game.exe
-          test ! -e dist/site/victoria2.exe
-          if find dist/site -type f \( -iname 'provinces.bmp' -o -iname 'definition.csv' \) | grep -q .; then
-            echo "ERROR: proprietary Victoria II data entered the public site artifact"
-            exit 1
-          fi
-          file dist/site/index.wasm
-          file dist/site/index.side.wasm
-          file "$OPENVIC_WASM"
-
-      - name: Configure GitHub Pages
-        uses: actions/configure-pages@v5
-
-      - name: Upload native site artifact
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: dist/site
-
-      - name: Deploy native site
-        id: deployment
-        uses: actions/deploy-pages@v4
+          retention-days: 30
