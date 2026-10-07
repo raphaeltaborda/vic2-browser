@@ -1,8 +1,6 @@
-name: Deploy static content to Pages
+name: Legacy prototype Pages deploy
 
 on:
-  push:
-    branches: ["main"]
   workflow_dispatch:
 
 permissions:
@@ -10,118 +8,8 @@ permissions:
   pages: write
   id-token: write
 
-concurrency:
-  group: "pages"
-  cancel-in-progress: false
-
 jobs:
-  deploy:
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+  legacy-disabled:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Pages
-        uses: actions/configure-pages@v5
-
-      - name: Prepare BoxedWine 18R2 runtime
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          mkdir -p boxedwine
-
-          base="https://raw.githubusercontent.com/andrewnakas/exebrowser/main/public/boxedwine/build/18r2"
-
-          curl -L --fail "$base/boxedwine-shell.js" -o boxedwine/boxedwine-shell.js
-          curl -L --fail "$base/boxedwine.css" -o boxedwine/boxedwine.css
-          curl -L --fail "$base/boxedwine.js" -o boxedwine/boxedwine.js
-          curl -L --fail "$base/boxedwine.wasm" -o boxedwine/boxedwine.wasm
-          curl -L --fail "$base/boxedwine.zip" -o boxedwine/boxedwine.zip
-          curl -L --fail "$base/browserfs.min.js" -o boxedwine/browserfs.min.js
-          curl -L --fail "$base/jszip.min.js" -o boxedwine/jszip.min.js
-
-          cat > boxedwine/boxedwine.html <<'HTML'
-          <!doctype html>
-          <html lang="en">
-          <head>
-            <meta charset="utf-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1">
-            <title>BoxedWine Runtime</title>
-            <link rel="stylesheet" href="boxedwine.css">
-          </head>
-          <body>
-            <div id="loading">
-              <figure id="spinner">
-                <div class="spinner"></div>
-              </figure>
-              <div class="emscripten" id="status">Downloading...</div>
-              <div class="emscripten">
-                <progress value="0" max="100" id="progress"></progress>
-              </div>
-            </div>
-
-            <div id="app">
-              <div id="controls" class="emscripten">
-                <button id="startbtn" style="display:none" onclick="start()">Start</button>
-                <button id="uploadbtn" style="display:none">Add File(s)</button>
-                <input style="display:none" id="upload" type="file" multiple>
-                <button id="downloadbtn" style="display:none">Get File(s)</button>
-                <a style="display:none" id="modalLink" href="#openModal">Open</a>
-                <a style="display:none" id="modalLinkExe" href="#openModalExe">Open</a>
-
-                <span id="sound-checkbox" style="display:none">
-                  <input type="checkbox" id="soundToggle">Enable Sound
-                </span>
-                <input type="checkbox" id="pointerLock">Lock/hide mouse pointer
-                <input type="checkbox" id="showConsole" checked>Show console
-              </div>
-
-              <div id="dropzone">
-                <div class="emscripten_border">
-                  <canvas class="emscripten" id="canvas" oncontextmenu="event.preventDefault()"></canvas>
-                </div>
-              </div>
-
-              <div id="console">
-                <textarea class="emscripten" id="output" rows="8" style="display:none"></textarea>
-              </div>
-
-              <div id="openModal" class="modalDialog">
-                <div>
-                  <a href="#close" title="Close" class="close">X</a>
-                  <input id="selectedItem" type="text" size="50" readonly>
-                  <div id="tree"></div>
-                  <h3 id="loadStatus">Loading...</h3>
-                </div>
-              </div>
-
-              <div id="openModalExe" class="modalDialog">
-                <div>
-                  <a id="openModalExeClick" href="#close" title="Close" class="close">X</a>
-                  <div id="message"></div>
-                  <div id="items"></div>
-                </div>
-              </div>
-            </div>
-
-            <script src="browserfs.min.js"></script>
-            <script src="jszip.min.js"></script>
-            <script src="boxedwine-shell.js"></script>
-            <script src="boxedwine.js"></script>
-          </body>
-          </html>
-          HTML
-
-      - name: Upload artifact
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: "."
-
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
+      - run: echo "Legacy BoxedWine deployment retired. Native OpenVic Web pipeline owns Pages."
