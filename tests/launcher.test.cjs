@@ -4,12 +4,16 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 
 const html = fs.readFileSync('web/openvic-shell.html', 'utf8');
-const code = html.match(/<script>\s*([\s\S]*?)<\/script>/)[1]
+const match = html.match(/<script>\s*([\s\S]*?)<\/script>/);
+assert.ok(match, 'launcher inline script not found');
+
+const code = match[1]
   .replace('$GODOT_CONFIG', JSON.stringify({executable: 'index', gdextensionLibs: ['openvic.wasm']}))
   .replace('$GODOT_THREADS_ENABLED', 'false');
 
 function setup({failStart = false} = {}) {
   const elements = new Map();
+  const windowListeners = new Map();
 
   class Element {
     constructor() {
@@ -43,7 +47,9 @@ function setup({failStart = false} = {}) {
       },
       createElement() { return new Element(); }
     },
-    window: {addEventListener() {}},
+    window: {
+      addEventListener(name, callback) { windowListeners.set(name, callback); }
+    },
     navigator: {},
     sessionStorage: {removeItem() {}},
     Engine: class {
@@ -84,6 +90,7 @@ function setup({failStart = false} = {}) {
     mounted,
     requests,
     intervals,
+    windowListeners,
     get config() { return config; },
     get starts() { return starts; }
   };
@@ -102,18 +109,25 @@ const required = [
   'history/countries/test.txt'
 ];
 
-function select(env, paths) {
-  env.context.fixtures = paths.map(path => ({
+function makeFile(path, {size = 4, raw = false} = {}) {
+  return {
     name: path.split('/').pop(),
-    webkitRelativePath: 'Victoria II/' + path,
-    size: 4,
-    arrayBuffer: async () => new ArrayBuffer(4)
-  }));
+    webkitRelativePath: raw ? path : 'Victoria II/' + path,
+    size,
+    arrayBuffer: async () => new ArrayBuffer(size)
+  };
+}
 
+function selectFiles(env, files) {
+  env.context.fixtures = files;
   vm.runInContext(
     'selected = fixtures; validateSelection(); ownership.checked = true; ownership.listeners.change();',
     env.context
   );
+}
+
+function select(env, paths) {
+  selectFiles(env, paths.map(path => makeFile(path)));
 }
 
 test('rejects an installation missing required interface data before startup', async () => {
@@ -127,16 +141,45 @@ test('rejects an installation missing required interface data before startup', a
   assert.equal(env.starts, 0);
 });
 
+test('validates required paths case-insensitively without rewriting mounted names', async () => {
+  const env = setup();
+  await ready();
+
+  select(env, required.map(path => path.toUpperCase()));
+
+  assert.equal(env.elements.get('launch').disabled, false);
+  await vm.runInContext('boot()', env.context);
+  assert(env.mounted.some(([path]) => path === '/vic2/COMMON/DEFINES.LUA'));
+});
+
+test('rejects unsafe and case-colliding relative paths before launch', async () => {
+  const unsafe = setup();
+  await ready();
+  selectFiles(unsafe, [
+    ...required.map(path => makeFile(path)),
+    makeFile('Victoria II/../escape.txt', {raw: true})
+  ]);
+  assert.equal(unsafe.elements.get('launch').disabled, true);
+
+  const duplicate = setup();
+  await ready();
+  selectFiles(duplicate, [
+    ...required.map(path => makeFile(path)),
+    makeFile('COMMON/DEFINES.LUA')
+  ]);
+  assert.equal(duplicate.elements.get('launch').disabled, true);
+});
+
 test('mounts local game data, excludes extras and starts only once', async () => {
   const env = setup();
   await ready();
 
   select(env, [
     ...required,
-    'mod/foo/data.txt',
-    'save games/test.v2',
-    'map/cache/test.bin',
-    'setup.msi',
+    'MOD/foo/data.txt',
+    'Save Games/test.v2',
+    'Map/Cache/test.bin',
+    'SETUP.MSI',
     'gfx/flags/ABC.tga',
     'music/theme.mp3'
   ]);
@@ -153,7 +196,7 @@ test('mounts local game data, excludes extras and starts only once', async () =>
 
   assert(env.mounted.some(([path]) => path === '/vic2/gfx/flags/ABC.tga'));
   assert(env.mounted.some(([path]) => path === '/vic2/music/theme.mp3'));
-  assert(!env.mounted.some(([path]) => /v2game|mod\/|save games|map\/cache|\.msi/.test(path)));
+  assert(!env.mounted.some(([path]) => /v2game|mod\/|save games|map\/cache|\.msi/i.test(path)));
 
   assert.equal(
     env.requests.length,
@@ -161,6 +204,24 @@ test('mounts local game data, excludes extras and starts only once', async () =>
     'Only the project PCK is fetched by the shell; local Victoria II files never leave the browser'
   );
   assert(env.requests[0].includes('index.pck'));
+});
+
+test('stderr is diagnostic; actual JavaScript errors become terminal', async () => {
+  const env = setup();
+  await ready();
+  select(env, required);
+
+  await vm.runInContext('boot()', env.context);
+
+  env.config.onPrintError('recoverable warning');
+  env.config.onPrint('[WebLoadRaw] after warning');
+  assert.match(env.elements.get('runtime-status').textContent, /after warning/);
+
+  env.windowListeners.get('error')({message: 'fatal fixture'});
+  assert.match(env.elements.get('runtime-status').textContent, /fatal fixture/);
+
+  env.config.onPrint('[WebLoadRaw] ignored after terminal');
+  assert.match(env.elements.get('runtime-status').textContent, /fatal fixture/);
 });
 
 test('runtime phases stay visible and diagnostic logs stay bounded', async () => {
@@ -182,10 +243,6 @@ test('runtime phases stay visible and diagnostic logs stay bounded', async () =>
   await ready();
 
   assert.equal(env.elements.get('log').textContent.split('\n').length, 500);
-
-  env.config.onPrintError('fixture failure');
-  env.config.onPrint('[WebLoadRaw] later phase');
-  assert.match(env.elements.get('runtime-status').textContent, /fixture failure/);
 });
 
 test('failed engine start requires reload and cannot be retried on a damaged instance', async () => {

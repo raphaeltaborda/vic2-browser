@@ -195,8 +195,14 @@
       element.textContent = text;
     }
 
+    function describeError(value) {
+      if (value instanceof Error) return value.stack || value.message;
+      if (value && typeof value === 'object' && 'message' in value) return String(value.message);
+      return String(value);
+    }
+
     function showError(err) {
-      const message = err instanceof Error ? (err.stack || err.message) : String(err);
+      const message = describeError(err);
       errorEl.textContent = message;
       errorEl.style.display = 'block';
       log('[erro] ' + message);
@@ -278,8 +284,10 @@
           onPrintError: (...args) => {
             const line = args.join(' ');
             console.error(...args);
-            log('[Godot] ' + line);
-            runtimeError('OpenVic: ' + line);
+            // Godot writes warnings and recoverable diagnostics to stderr too.
+            // Fatal JS/WASM failures are handled by rejected promises and the
+            // global error/unhandledrejection handlers below.
+            log('[Godot stderr] ' + line);
           },
         }));
 
@@ -306,9 +314,26 @@
       return slash >= 0 ? raw.slice(slash + 1) : raw;
     }
 
+    function safeRelativePath(file) {
+      const rel = relativePath(file);
+      const parts = rel.split('/');
+      if (!rel || rel.startsWith('/') || rel.includes('\0') ||
+          parts.some(part => !part || part === '.' || part === '..')) {
+        throw new Error('A seleção contém um caminho de arquivo inválido.');
+      }
+      return rel;
+    }
+
     function fileMap() {
       const map = new Map();
-      for (const file of selected) map.set(relativePath(file).toLowerCase(), file);
+      for (const file of selected) {
+        const rel = safeRelativePath(file);
+        const key = rel.toLowerCase();
+        if (map.has(key)) {
+          throw new Error('A seleção contém caminhos duplicados ou conflitantes.');
+        }
+        map.set(key, file);
+      }
       return map;
     }
 
@@ -326,7 +351,19 @@
 
     function validateSelection() {
       checks.replaceChildren();
-      const map = fileMap();
+
+      let map;
+      try {
+        map = fileMap();
+        row('Estrutura de arquivos', true, 'OK');
+      } catch (err) {
+        log('[seleção] ' + describeError(err));
+        row('Estrutura de arquivos', false, 'inválida');
+        validated = false;
+        launchButton.disabled = true;
+        return;
+      }
+
       const required = [
         ['v2game.exe', 'Cópia do Victoria II'],
         ['common/defines.lua', 'Defines'],
@@ -349,7 +386,7 @@
       row('History', hasHistory, hasHistory ? 'OK' : 'ausente');
       ok = ok && hasLocalisation && hasHistory;
 
-      const mounted = selected.filter(f => shouldMount(relativePath(f)));
+      const mounted = selected.filter(f => shouldMount(safeRelativePath(f)));
       const bytes = mounted.reduce((n, f) => n + f.size, 0);
       row('Arquivos locais', selected.length > 0, selected.length.toLocaleString('pt-BR'));
       row('Dados a montar', selected.length > 0, (bytes / 1024 / 1024).toFixed(0) + ' MB');
@@ -386,17 +423,14 @@
     }
 
     async function mountVictoria() {
-      const files = selected.filter(f => shouldMount(relativePath(f)));
+      const files = selected.filter(f => shouldMount(safeRelativePath(f)));
       const total = files.reduce((n, f) => n + f.size, 0);
       let done = 0;
       let count = 0;
       let lastYield = performance.now();
       status.textContent = 'Preparando arquivos locais…';
       for (const file of files) {
-        const rel = relativePath(file);
-        if (!rel || rel.split('/').some(part => part === '..' || part === '.')) {
-          throw new Error('Caminho inválido na instalação selecionada.');
-        }
+        const rel = safeRelativePath(file);
         engine.copyToFS('/vic2/' + rel, await file.arrayBuffer());
         done += file.size;
         count++;
@@ -470,8 +504,10 @@
       }
     }
 
-    window.addEventListener('error', event => runtimeError('JavaScript: ' + (event.message || 'erro desconhecido')));
-    window.addEventListener('unhandledrejection', event => runtimeError('Promise: ' + String(event.reason)));
+    window.addEventListener('error', event =>
+      runtimeError('JavaScript: ' + describeError(event.error || event.message || 'erro desconhecido')));
+    window.addEventListener('unhandledrejection', event =>
+      runtimeError('Promise: ' + describeError(event.reason)));
     document.getElementById('reload').addEventListener('click', () => location.reload());
     document.getElementById('copy-log').addEventListener('click', async () => {
       const text = ['Victoria II Web · launcher-v2',

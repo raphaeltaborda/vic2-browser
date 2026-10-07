@@ -2,7 +2,7 @@
 
 Experimental native browser port of a Victoria II-compatible engine using **OpenVic + Godot Web + WebAssembly**.
 
-This branch, `web-port-v2`, is the clean foundation for the next iteration of the port. It intentionally carries only components that were already independently useful and testable in the previous implementation.
+The `web-port-v2` branch is the clean implementation base. Compatibility work is introduced only as isolated, reproducible patches with a demonstrated failure behind each change.
 
 ## Non-negotiable design rule
 
@@ -10,23 +10,18 @@ This branch, `web-port-v2`, is the clean foundation for the next iteration of th
 
 The browser client requires the player to select their own legitimate Victoria II installation locally. Proprietary Paradox files stay inside the browser session and are not part of the repository or deployment.
 
-## Preserved foundation
+## Validated foundation
 
-- Local Victoria II folder selection.
-- Installation structure validation before startup.
+- Local Victoria II folder selection and structure validation.
 - Local-only mounting into Emscripten MEMFS under `/vic2`.
-- Exclusion of Windows executables, DLLs, archives, saves, mods and map cache from the mounted vanilla data set.
-- Godot/OpenVic browser launcher UI.
-- Runtime diagnostics panel with bounded logs.
-- Desktop/mobile launcher smoke test.
-- Unit tests covering local mounting, validation, single-start behavior and failure handling.
-- Copyright boundary and third-party notices.
-
-## Intentionally not carried from the old branch
-
-The old monolithic Web patcher and its loader/audio workarounds are not part of this branch.
-
-In particular, `scripts/patch_openvic_web.py`, `scripts/prepare_openvic_godot_web.py`, and build workflows coupled to those scripts were deliberately left behind. Necessary WebAssembly portability changes will be reintroduced as small, auditable patches after they are reproduced and tested.
+- Exclusion of executables, DLLs, archives, saves, mods and map cache from the vanilla mount.
+- Path-safety and duplicate-path validation before startup.
+- Godot/OpenVic launcher UI with bounded diagnostics.
+- Desktop/mobile browser smoke tests and behavioral unit tests.
+- Reproducible OpenVic wasm32 build from pinned revisions.
+- Separate patches for the Emscripten side-module target, libc++ ABI namespace portability and 32-bit hashing.
+- Stage 1 artifact validation for WebAssembly magic, Emscripten `dylink.0`, and the `openvic_library_init` GDExtension entry symbol.
+- GitHub Actions dependencies pinned to immutable commit SHAs.
 
 ## Architecture target
 
@@ -41,21 +36,26 @@ Browser
 
 There is no Wine, BoxedWine, x86 emulation, or execution of `v2game.exe` in the target architecture.
 
-## Next milestone
-
-Rebuild the native Web toolchain cleanly and establish this progression:
+## Milestones
 
 ```text
-select legitimate installation
-→ mount /vic2
-→ initialize OpenVic
-→ load all definitions
-→ main menu
-→ country selection
-→ 1836 map
-→ advance one game day
+[done] clean launcher foundation
+[done] reproducible OpenVic wasm32 side module
+[next] minimal Godot Web export loading the validated GDExtension
+       ↓
+mount /vic2
+       ↓
+load all definitions
+       ↓
+main menu
+       ↓
+country selection
+       ↓
+1836 map
+       ↓
+advance one game day
 ```
 
-No audio workaround or feature bypass should be added merely to move the loading percentage forward. A Web incompatibility should be isolated at the API/assumption that causes it and fixed there.
+No subsystem should be disabled merely to move startup forward. A Web incompatibility must be isolated at the API or platform assumption that causes it and fixed at that boundary.
 
-See `docs/FOUNDATION.md` for the migration boundary.
+See `docs/FOUNDATION.md` for engineering rules and `docs/BUILD_STAGE_1.md` for the validated WASM build.

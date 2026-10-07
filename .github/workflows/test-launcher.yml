@@ -21,27 +21,33 @@ jobs:
   launcher:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: '22'
+
+      - name: Check test syntax
+        run: node --check tests/launcher.test.cjs && node --check tests/launcher.browser.cjs
 
       - name: Test launcher behavior
         run: node --test tests/launcher.test.cjs
 
       - name: Check browser layout with a stub engine
         run: |
-          npm install --no-save --package-lock=false playwright@1.58.2
+          set -euo pipefail
+          npm install --no-save --package-lock=false --ignore-scripts --no-audit --no-fund playwright@1.58.2
           export CHROME="$(command -v google-chrome || command -v chromium)"
           test -n "$CHROME"
           node tests/launcher.browser.cjs
 
       - name: Upload launcher previews
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: launcher-previews
           path: build/screenshots
           if-no-files-found: ignore
+          retention-days: 30
