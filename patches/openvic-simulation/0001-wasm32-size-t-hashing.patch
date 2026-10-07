@@ -1,0 +1,98 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+Subject: [PATCH] Make simulation hashing safe on 32-bit size_t
+
+wasm32 uses a 32-bit size_t. The existing Murmur finalizer shifts size_t by
+33 bits, the case-insensitive FNV hash truncates 64-bit constants, and the
+point-map segment hash shifts size_t by 32 bits. Preserve the current 64-bit
+behavior and use explicit 32-bit hashing/folding on 32-bit targets.
+
+diff --git a/src/openvic-simulation/core/Hash.hpp b/src/openvic-simulation/core/Hash.hpp
+--- a/src/openvic-simulation/core/Hash.hpp
++++ b/src/openvic-simulation/core/Hash.hpp
+@@ -1,5 +1,6 @@
+ #include <climits>
+ #include <cstddef>
++#include <cstdint>
+ #include <functional>
+ #include <tuple>
+ 
+@@ -7,11 +8,21 @@
+ 	static constexpr std::size_t MURMUR3_SEED = 0x7F07C65;
+ 
+ 	inline constexpr std::size_t hash_murmur3(std::size_t key, std::size_t seed = MURMUR3_SEED) {
+-		key ^= seed;
+-		key ^= key >> 33;
+-		key *= 0xff51afd7ed558ccd;
+-		key ^= key >> 33;
+-		key *= 0xc4ceb9fe1a85ec53;
+-		key ^= key >> 33;
+-		return key;
++		if constexpr (sizeof(std::size_t) >= 8) {
++			std::uint64_t value = static_cast<std::uint64_t>(key ^ seed);
++			value ^= value >> 33;
++			value *= UINT64_C(0xff51afd7ed558ccd);
++			value ^= value >> 33;
++			value *= UINT64_C(0xc4ceb9fe1a85ec53);
++			value ^= value >> 33;
++			return static_cast<std::size_t>(value);
++		} else {
++			std::uint32_t value = static_cast<std::uint32_t>(key ^ seed);
++			value ^= value >> 16;
++			value *= UINT32_C(0x85ebca6b);
++			value ^= value >> 13;
++			value *= UINT32_C(0xc2b2ae35);
++			value ^= value >> 16;
++			return static_cast<std::size_t>(value);
++		}
+ 	}
+diff --git a/src/openvic-simulation/types/OrderedContainers.hpp b/src/openvic-simulation/types/OrderedContainers.hpp
+--- a/src/openvic-simulation/types/OrderedContainers.hpp
++++ b/src/openvic-simulation/types/OrderedContainers.hpp
+@@ -1,12 +1,18 @@
+ 	private:
+ 		/* Based on the byte array hashing functions in MSVC's <type_traits>. */
+ 		[[nodiscard]] static constexpr size_t _hash_bytes_case_insensitive(char const* first, size_t count) {
+-			constexpr size_t _offset_basis = 14695981039346656037ULL;
+-			constexpr size_t _prime = 1099511628211ULL;
+-			size_t hash = _offset_basis;
++			size_t hash;
++			size_t prime;
++			if constexpr (sizeof(size_t) >= 8) {
++				hash = static_cast<size_t>(14695981039346656037ULL);
++				prime = static_cast<size_t>(1099511628211ULL);
++			} else {
++				hash = static_cast<size_t>(2166136261U);
++				prime = static_cast<size_t>(16777619U);
++			}
+ 			for (size_t i = 0; i < count; ++i) {
+ 				hash ^= static_cast<size_t>(std::tolower(static_cast<unsigned char>(first[i])));
+-				hash *= _prime;
++				hash *= prime;
+ 			}
+ 			return hash;
+ 		}
+diff --git a/src/openvic-simulation/pathfinding/PointMap.hpp b/src/openvic-simulation/pathfinding/PointMap.hpp
+--- a/src/openvic-simulation/pathfinding/PointMap.hpp
++++ b/src/openvic-simulation/pathfinding/PointMap.hpp
+@@ -1,6 +1,19 @@
+ 		struct SegmentHash {
+ 			inline constexpr std::size_t operator()(Segment const& segment) const {
+-				return hash_murmur3(hash_murmur3(segment.key.first) << 32) |
+-					hash_murmur3(segment.key.second);
++				if constexpr (sizeof(std::size_t) >= 8) {
++					std::uint64_t high = static_cast<std::uint64_t>(
++						hash_murmur3(static_cast<std::size_t>(segment.key.first))
++					);
++					return hash_murmur3(static_cast<std::size_t>(high << 32)) |
++						hash_murmur3(static_cast<std::size_t>(segment.key.second));
++				} else {
++					const std::uint64_t first = segment.key.first;
++					const std::uint64_t second = segment.key.second;
++					std::size_t seed = hash_murmur3(static_cast<std::size_t>(first ^ (first >> 32)));
++					const std::size_t folded_second = static_cast<std::size_t>(second ^ (second >> 32));
++					seed ^= hash_murmur3(folded_second) + static_cast<std::size_t>(0x9e3779b9U) +
++						(seed << 6) + (seed >> 2);
++					return hash_murmur3(seed);
++				}
+ 			}
+ 		};
