@@ -104,6 +104,20 @@ jobs:
 
           test -s dist/engine/libopenvic.web.template_release.wasm32.nothreads.wasm
           grep -Fq 'web.wasm32.single.release' dist/engine/openvic.gdextension
+
+          python3 - <<'PY'
+          from pathlib import Path
+
+          wasm = Path("dist/engine/libopenvic.web.template_release.wasm32.nothreads.wasm")
+          magic = wasm.read_bytes()[:8]
+          print("OpenVic artifact magic:", magic)
+          if magic[:4] != b"\\x00asm":
+              raise SystemExit(
+                  "OpenVic artifact is not a WebAssembly binary. "
+                  "A static ar archive with a .wasm suffix must never be published."
+              )
+          PY
+
           file dist/engine/libopenvic.web.template_release.wasm32.nothreads.wasm
           ls -lh dist/engine
 
