@@ -59,6 +59,21 @@ if web_start not in l:
     l = l.replace(thread_start, web_start, 1)
 loading.write_text(l, encoding="utf-8")
 
+# Browser canvas sizing/fullscreen are controlled by the HTML shell. Avoid
+# desktop-only monitor/fullscreen/VSync operations during startup.
+settings = GAME / "src/Autoload/Settings/GameSettings.gd"
+g = settings.read_text(encoding="utf-8")
+for function in ("_resolution_apply", "_screen_mode_apply", "_monitor_selection_apply", "_refresh_rate_apply"):
+    needle = f"func {function}("
+    pos = g.find(needle)
+    if pos == -1:
+        raise SystemExit(f"GameSettings.gd missing {function}")
+    body = g.find("\n", pos)
+    guard = '\tif OS.has_feature("web"): return\n'
+    if g[body + 1:body + 1 + len(guard)] != guard:
+        g = g[:body + 1] + guard + g[body + 1:]
+settings.write_text(g, encoding="utf-8")
+
 # Add a real Godot Web export preset with GDExtension support and no pthreads.
 presets = GAME / "export_presets.cfg"
 p = presets.read_text(encoding="utf-8")
