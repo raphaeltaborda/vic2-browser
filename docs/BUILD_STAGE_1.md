@@ -53,7 +53,7 @@ No compatibility loader, sound system, parser, game rule, or UI source is change
 
 `scripts/apply-portability-patches.sh` refuses to patch if any source checkout is on the wrong revision or is already dirty.
 
-GitHub Actions dependencies are referenced by immutable commit SHA. The artifact records the port commit, source revisions, Emscripten version, patch checksums and final WASM/descriptor checksums. Its `bin/openvic/` layout already matches the `res://bin/openvic/` path declared by the GDExtension, and license/notices travel with the artifact.
+GitHub Actions dependencies are referenced by immutable commit SHA. The artifact records the port commit, source revisions and Emscripten version. Its `bin/openvic/` layout already matches the `res://bin/openvic/` path declared by the GDExtension. The exact patch series and license/notices travel with the artifact, and all checksum manifests use paths relative to the artifact root so they can be verified after extraction.
 
 ## Acceptance criteria
 
@@ -70,6 +70,7 @@ The workflow succeeds only if:
 9. the module exports `openvic_library_init`;
 10. `openvic.gdextension` points `web.wasm32.single.release` at the validated filename;
 11. the descriptor and WASM are packaged under `bin/openvic/`, matching the descriptor path;
-12. provenance, checksums, third-party notices and the OpenVic license are uploaded with the artifact.
+12. provenance, the exact patch files, third-party notices and the OpenVic license are uploaded with the artifact;
+13. all checksum manifests pass `sha256sum -c` from the artifact root before upload.
 
 A new workaround is not an acceptable response to a future failure until that failure is isolated.

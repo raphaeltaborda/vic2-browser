@@ -112,12 +112,19 @@ jobs:
 
           mkdir -p dist/bin/openvic
           mkdir -p dist/licenses
+          mkdir -p dist/patches/openvic
+          mkdir -p dist/patches/openvic-scripts
+          mkdir -p dist/patches/openvic-simulation
 
           cp "$WASM" dist/bin/openvic/libopenvic.web.template_release.wasm32.threads.wasm
           cp "$GDEXTENSION" dist/bin/openvic/openvic.gdextension
           cp THIRD_PARTY_NOTICES.md dist/licenses/THIRD_PARTY_NOTICES.md
           cp vendor/OpenVic/LICENSE.md dist/licenses/OpenVic-LICENSE.md
           cp vendor/OpenVic/COPYRIGHT dist/licenses/OpenVic-COPYRIGHT
+          cp patches/openvic/0001-emscripten-side-module.patch dist/patches/openvic/
+          cp patches/openvic/0002-web-gdextension-library.patch dist/patches/openvic/
+          cp patches/openvic-scripts/0001-portable-libcpp-abi-namespace.patch dist/patches/openvic-scripts/
+          cp patches/openvic-simulation/0001-wasm32-size-t-hashing.patch dist/patches/openvic-simulation/
 
           printf '%s\n' "$GITHUB_SHA" > dist/PORT_COMMIT
           printf '%s\n' "$OPENVIC_COMMIT" > dist/OPENVIC_COMMIT
@@ -125,14 +132,19 @@ jobs:
           printf '%s\n' "$OPENVIC_SIMULATION_COMMIT" > dist/OPENVIC_SIMULATION_COMMIT
           printf '%s\n' "$EMSCRIPTEN_VERSION" > dist/EMSCRIPTEN_VERSION
 
-          sha256sum dist/bin/openvic/libopenvic.web.template_release.wasm32.threads.wasm > dist/WASM_SHA256
-          sha256sum dist/bin/openvic/openvic.gdextension > dist/GDEXTENSION_SHA256
+          (
+            cd dist
+            sha256sum bin/openvic/libopenvic.web.template_release.wasm32.threads.wasm > WASM_SHA256
+            sha256sum bin/openvic/openvic.gdextension > GDEXTENSION_SHA256
+            sha256sum patches/openvic/0001-emscripten-side-module.patch > PATCHES_SHA256
+            sha256sum patches/openvic/0002-web-gdextension-library.patch >> PATCHES_SHA256
+            sha256sum patches/openvic-scripts/0001-portable-libcpp-abi-namespace.patch >> PATCHES_SHA256
+            sha256sum patches/openvic-simulation/0001-wasm32-size-t-hashing.patch >> PATCHES_SHA256
 
-          : > dist/PATCHES_SHA256
-          sha256sum patches/openvic/0001-emscripten-side-module.patch >> dist/PATCHES_SHA256
-          sha256sum patches/openvic/0002-web-gdextension-library.patch >> dist/PATCHES_SHA256
-          sha256sum patches/openvic-scripts/0001-portable-libcpp-abi-namespace.patch >> dist/PATCHES_SHA256
-          sha256sum patches/openvic-simulation/0001-wasm32-size-t-hashing.patch >> dist/PATCHES_SHA256
+            sha256sum -c WASM_SHA256
+            sha256sum -c GDEXTENSION_SHA256
+            sha256sum -c PATCHES_SHA256
+          )
 
           find dist -type f -print | sort
 
