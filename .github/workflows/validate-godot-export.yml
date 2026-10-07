@@ -37,7 +37,7 @@ jobs:
           wasm = Path("engine-artifact/libopenvic.web.template_release.wasm32.nothreads.wasm")
           magic = wasm.read_bytes()[:8]
           print("OpenVic artifact magic:", magic)
-          if magic[:4] != b"\\x00asm":
+          if magic[:4].hex() != "0061736d":
               raise SystemExit("Downloaded OpenVic artifact is not a WebAssembly binary.")
           PY
 
