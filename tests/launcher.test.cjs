@@ -108,12 +108,13 @@ test('port patch keeps compatibility playlist indices bounded', () => {
   assert.match(generated, /range\(len\(song_names\)\)/);
   assert.match(generated, /possible_indices\.erase\(title_index\)/);
   assert.match(generated, /possible_indices\.erase\(last_played\)/);
-  assert.match(generated, /if playlist\.is_empty\(\):/);
+  assert.match(generated, /if possible_indices\.is_empty\(\):/);
   assert.doesNotMatch(generated, /possible_indices\.remove_at\(title_index\)/);
   assert.doesNotMatch(generated, /possible_indices\.remove_at\(last_played\)/);
 
   const select = prepare.match(/select_new = """([\s\S]*?)"""/);
   assert.ok(select, 'select_new patch body not found');
+  assert.match(select[1], /if playlist\.is_empty\(\):/);
   assert.match(select[1], /last_played = _selected_track/);
 });
 
