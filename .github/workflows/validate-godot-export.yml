@@ -16,6 +16,8 @@ on:
     branches: ["main"]
     paths:
       - ".github/workflows/validate-godot-export.yml"
+      - "web/openvic-shell.html"
+      - "scripts/prepare_openvic_godot_web.py"
 
 permissions:
   contents: read
