@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BoxedWine Test · Victoria II Browser</title>
+    <link rel="stylesheet" href="style.css">
+
+    <script>
+        const isBrave = Boolean(navigator.brave);
+
+        window.coi = {
+            shouldRegister: () => !isBrave,
+            shouldDeregister: () => isBrave,
+            coepCredentialless: () => false,
+            coepDegrade: () => false,
+            doReload: () => window.location.reload(),
+            quiet: true
+        };
+    </script>
+    <script src="coi-serviceworker.js"></script>
+</head>
+<body>
+    <main class="app">
+        <a class="back-link" href="index.html">← Voltar ao diagnóstico</a>
+
+        <div class="eyebrow" style="margin-top: 24px;">ETAPA 2 · BOXEDWINE</div>
+        <h1>Windows dentro do navegador</h1>
+        <p class="intro">
+            Este teste carrega um filesystem Wine open-source e tenta iniciar o
+            Notepad dentro do BoxedWine. Ainda não usa nenhum arquivo do Victoria II.
+        </p>
+
+        <section class="panel">
+            <h2>Teste do runtime</h2>
+            <p>
+                O primeiro carregamento pode baixar cerca de 20 MB.
+            </p>
+            <a class="primary-button"
+               href="boxedwine/boxedwine.html?root=boxedwine&p=notepad&resolution=800x600&sound=false&storage=memory">
+                Iniciar Notepad no BoxedWine
+            </a>
+        </section>
+
+        <section class="panel">
+            <h2>O que este teste prova</h2>
+            <p>
+                Se o Notepad abrir, teremos confirmado a cadeia navegador → WebAssembly →
+                emulação x86 → Wine → programa Windows. Depois disso substituímos o programa
+                de teste pelo Victoria II e passamos a investigar compatibilidade com DirectX,
+                áudio e filesystem.
+            </p>
+        </section>
+    </main>
+</body>
+</html>
