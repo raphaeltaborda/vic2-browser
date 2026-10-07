@@ -171,6 +171,7 @@
       runtimeStatus.classList.add('error');
       runtimeStatus.textContent = String(message).slice(0, 300) + ' · Abra o diagnóstico abaixo.';
       runtimeStatus.style.display = 'block';
+      document.getElementById('diagnostics').open = true;
     }
 
     async function withTimeout(promise, ms, message) {
@@ -380,8 +381,8 @@
         ok = ok && present;
       }
 
-      const hasLocalisation = [...map.keys()].some(p => p.startsWith('localisation/'));
-      const hasHistory = [...map.keys()].some(p => p.startsWith('history/'));
+      const hasLocalisation = [...map.entries()].some(([p, file]) => p.startsWith('localisation/') && file.size > 0);
+      const hasHistory = [...map.entries()].some(([p, file]) => p.startsWith('history/') && file.size > 0);
       row('Localisation', hasLocalisation, hasLocalisation ? 'OK' : 'ausente');
       row('History', hasHistory, hasHistory ? 'OK' : 'ausente');
       ok = ok && hasLocalisation && hasHistory;
@@ -413,6 +414,9 @@
 
       // Revalidate this project's PCK without deleting caches owned by other pages.
       const packURL = new URL(pack, location.href);
+      if (packURL.origin !== new URL(location.href).origin) {
+        throw new Error('O pacote do projeto deve ser carregado da mesma origem da página.');
+      }
       packURL.searchParams.set('vic2_build', 'launcher-v2');
       const response = await fetch(packURL, { cache: 'no-store' });
       if (!response.ok) throw new Error('Falha ao carregar o projeto Web: HTTP ' + response.status);

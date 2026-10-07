@@ -1,0 +1,17 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+Subject: [PATCH] Declare the validated Web GDExtension library
+
+Add only the release Web entry that Stage 1 actually builds and validates.
+Debug Web support will be declared only after a debug side module exists.
+
+diff --git a/game/bin/openvic.gdextension b/game/bin/openvic.gdextension
+--- a/game/bin/openvic.gdextension
++++ b/game/bin/openvic.gdextension
+@@ -7,6 +7,7 @@ reloadable = true
+ 
+ [libraries]
+ 
++web.wasm32.single.release = "res://bin/openvic/libopenvic.web.template_release.wasm32.threads.wasm"
+ linux.x86_64.editor = "res://bin/openvic/libopenvic.linux.editor.x86_64.so"
+ windows.x86_64.editor = "res://bin/openvic/openvic.windows.editor.x86_64.dll"
+ macos.editor = "res://bin/openvic/libopenvic.macos.editor.dylib"

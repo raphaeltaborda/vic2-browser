@@ -170,6 +170,30 @@ test('rejects unsafe and case-colliding relative paths before launch', async () 
   assert.equal(duplicate.elements.get('launch').disabled, true);
 });
 
+test('rejects an empty localisation/history payload', async () => {
+  const env = setup();
+  await ready();
+
+  selectFiles(env, required.map(path =>
+    makeFile(path, {size: path.startsWith('localisation/') ? 0 : 4})
+  ));
+
+  assert.equal(env.elements.get('launch').disabled, true);
+});
+
+test('rejects a cross-origin project pack before network access', async () => {
+  const env = setup();
+  await ready();
+  select(env, required);
+
+  vm.runInContext("GODOT_CONFIG.mainPack = 'https://other.example/index.pck';", env.context);
+  await vm.runInContext('boot()', env.context);
+
+  assert.equal(env.starts, 0);
+  assert.equal(env.requests.length, 0);
+  assert.match(env.elements.get('error').textContent, /mesma origem/);
+});
+
 test('mounts local game data, excludes extras and starts only once', async () => {
   const env = setup();
   await ready();

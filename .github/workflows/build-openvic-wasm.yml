@@ -87,8 +87,12 @@ jobs:
           test -s "$WASM"
           node scripts/validate-stage1-wasm.mjs "$WASM"
 
+          GDEXTENSION="vendor/OpenVic/game/bin/openvic.gdextension"
+          grep -Fqx 'web.wasm32.single.release = "res://bin/openvic/libopenvic.web.template_release.wasm32.threads.wasm"' "$GDEXTENSION"
+
           mkdir -p dist
           cp "$WASM" dist/libopenvic.web.template_release.wasm32.threads.wasm
+          cp "$GDEXTENSION" dist/openvic.gdextension
           printf '%s\n' "$OPENVIC_COMMIT" > dist/OPENVIC_COMMIT
           printf '%s\n' "$OPENVIC_SCRIPTS_COMMIT" > dist/OPENVIC_SCRIPTS_COMMIT
           printf '%s\n' "$OPENVIC_SIMULATION_COMMIT" > dist/OPENVIC_SIMULATION_COMMIT

@@ -23,13 +23,14 @@ This branch is the implementation base for the native Web port. The old `main` h
 
 ### Stage 1 WebAssembly port
 
-The first native build milestone is reproducible from pinned revisions and contains three isolated patches:
+The first native build milestone is reproducible from pinned revisions and contains four isolated patches:
 
 1. `patches/openvic/0001-emscripten-side-module.patch` — emits the OpenVic GDExtension as an Emscripten side module.
-2. `patches/openvic-scripts/0001-portable-libcpp-abi-namespace.patch` — removes a hard-coded libc++ ABI namespace assumption in generated memory code.
-3. `patches/openvic-simulation/0001-wasm32-size-t-hashing.patch` — makes size_t-dependent hashing defined on wasm32 while preserving the existing 64-bit path.
+2. `patches/openvic/0002-web-gdextension-library.patch` — declares only the validated release Web library in the GDExtension descriptor.
+3. `patches/openvic-scripts/0001-portable-libcpp-abi-namespace.patch` — removes a hard-coded libc++ ABI namespace assumption in generated memory code.
+4. `patches/openvic-simulation/0001-wasm32-size-t-hashing.patch` — makes size_t-dependent hashing defined on wasm32 while preserving the existing 64-bit path.
 
-The Stage 1 CI verifies not only the WASM magic bytes but also the Emscripten `dylink.0` section and exported `openvic_library_init` symbol.
+The Stage 1 CI verifies the WASM magic bytes, Emscripten `dylink.0` section, exported `openvic_library_init` symbol, and exact Web descriptor entry.
 
 ### Tests
 

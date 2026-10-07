@@ -21,13 +21,19 @@ It does **not** start Godot, load Victoria II data, patch compatibility parsers,
 
 ## Patch boundary
 
-Stage 1 has exactly three portability patches.
+Stage 1 has exactly four narrowly scoped portability/integration patches.
 
 ### OpenVic target
 
 `patches/openvic/0001-emscripten-side-module.patch`
 
 Changes only the top-level build target so Emscripten emits a dynamic WebAssembly side module with the expected filename.
+
+### Web GDExtension descriptor
+
+`patches/openvic/0002-web-gdextension-library.patch`
+
+Declares the validated release side module using the Godot feature tags `web.wasm32.single.release`. It deliberately does not declare a Web debug library that Stage 1 does not build.
 
 ### libc++ ABI namespace
 
@@ -62,6 +68,7 @@ The workflow succeeds only if:
 7. the artifact begins with `00 61 73 6d`;
 8. the module contains the Emscripten `dylink.0` custom section;
 9. the module exports `openvic_library_init`;
-10. the validated artifact and reproducibility metadata are uploaded together.
+10. `openvic.gdextension` points `web.wasm32.single.release` at the validated filename;
+11. the descriptor, validated WASM and reproducibility metadata are uploaded together.
 
 A new workaround is not an acceptable response to a future failure until that failure is isolated.

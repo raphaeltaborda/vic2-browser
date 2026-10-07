@@ -19,8 +19,8 @@ The browser client requires the player to select their own legitimate Victoria I
 - Godot/OpenVic launcher UI with bounded diagnostics.
 - Desktop/mobile browser smoke tests and behavioral unit tests.
 - Reproducible OpenVic wasm32 build from pinned revisions.
-- Separate patches for the Emscripten side-module target, libc++ ABI namespace portability and 32-bit hashing.
-- Stage 1 artifact validation for WebAssembly magic, Emscripten `dylink.0`, and the `openvic_library_init` GDExtension entry symbol.
+- Separate patches for the Emscripten side-module target, Web GDExtension descriptor, libc++ ABI namespace portability and 32-bit hashing.
+- Stage 1 artifact validation for WebAssembly magic, Emscripten `dylink.0`, the `openvic_library_init` entry symbol, and the exact Web library declaration in `openvic.gdextension`.
 - GitHub Actions dependencies pinned to immutable commit SHAs.
 
 ## Architecture target
