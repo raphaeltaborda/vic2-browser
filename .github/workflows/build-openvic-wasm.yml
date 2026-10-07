@@ -97,7 +97,7 @@ jobs:
           print(f"artifact={path}")
           print(f"size={path.stat().st_size}")
           print(f"magic={magic.hex()}")
-          if magic != b"\\x00asm":
+          if magic != b"\x00asm":
               raise SystemExit("artifact is not a WebAssembly binary")
           PY
 
