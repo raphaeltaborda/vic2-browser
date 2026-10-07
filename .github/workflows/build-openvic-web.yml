@@ -1,4 +1,4 @@
-name: Build OpenVic Web port
+name: Build and deploy native Victoria II Web port
 
 on:
   push:
@@ -6,15 +6,26 @@ on:
     paths:
       - ".github/workflows/build-openvic-web.yml"
       - "scripts/patch_openvic_web.py"
+      - "scripts/prepare_openvic_godot_web.py"
+      - "web/openvic-shell.html"
   workflow_dispatch:
 
 permissions:
   contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "native-vic2-pages"
+  cancel-in-progress: true
 
 jobs:
-  wasm-extension:
+  build-export-deploy:
     runs-on: ubuntu-24.04
-    timeout-minutes: 60
+    timeout-minutes: 90
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
 
     steps:
       - name: Checkout vic2-browser
@@ -23,18 +34,20 @@ jobs:
       - name: Install build tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y ninja-build cmake python3 python3-pip pkg-config
+          sudo apt-get install -y ninja-build cmake python3 python3-pip pkg-config libtbb-dev unzip
 
-      - name: Install Emscripten
+      - name: Install Emscripten used by Godot 4.7.2
         uses: mymindstorm/setup-emsdk@v14
         with:
           version: 4.0.12
           actions-cache-folder: emsdk-cache
 
-      - name: Verify Emscripten
+      - name: Verify toolchain
         run: |
           emcc --version
           em++ --version
+          cmake --version
+          ninja --version
 
       - name: Fetch pinned OpenVic source
         run: |
@@ -44,14 +57,13 @@ jobs:
           git checkout --detach d3361890c62ede9464eb41af7f797e87dedf4b28
           git submodule update --init --recursive
 
-      - name: Apply web port patch
+      - name: Apply native WebAssembly port patches
         run: python3 scripts/patch_openvic_web.py
 
-      - name: Configure OpenVic for WebAssembly
-        run: |
-          emcmake cmake             -S vendor/OpenVic             -B build/openvic-web             -G Ninja             -DCMAKE_BUILD_TYPE=Release             -DGODOTCPP_TARGET=template_release             -DGODOTCPP_THREADS=OFF             -DGODOTCPP_PRECISION=single             -DOPENVIC_USE_PCH=OFF             -DOPENVIC_SIM_BUILD_HEADLESS=OFF             -DOPENVIC_SIM_BUILD_TESTS=OFF             -DOPENVIC_SIM_BUILD_BENCHMARKS=OFF
+      - name: Configure OpenVic GDExtension for wasm32 single-thread
+        run: emcmake cmake -S vendor/OpenVic -B build/openvic-web -G Ninja -DCMAKE_BUILD_TYPE=Release -DGODOTCPP_TARGET=template_release -DGODOTCPP_THREADS=OFF -DGODOTCPP_PRECISION=single -DOPENVIC_USE_PCH=OFF -DOPENVIC_SIM_BUILD_HEADLESS=OFF -DOPENVIC_SIM_BUILD_TESTS=OFF -DOPENVIC_SIM_BUILD_BENCHMARKS=OFF
 
-      - name: Patch foonathan-memory for current libc++ ABI namespace
+      - name: Patch legacy foonathan-memory libc++ ABI references
         run: |
           python3 - <<'PY'
           from pathlib import Path
@@ -67,25 +79,109 @@ jobs:
               raise SystemExit("Expected libc++ __1 references were not found.")
           PY
 
-      - name: Build OpenVic WebAssembly extension
+      - name: Build native OpenVic WebAssembly extension
         run: |
           cmake --build build/openvic-web --target openvic --parallel 4
-          echo "=== WebAssembly outputs ==="
-          find build/openvic-web vendor/OpenVic/game/bin/openvic -type f             \( -name "*.wasm" -o -name "*.a" \) -printf "%p %k KB\n" | sort
+          find build/openvic-web -type f -name "libopenvic*.wasm" -printf "%p %k KB\n"
 
-      - name: Collect extension
+      - name: Collect native wasm engine
         run: |
           mkdir -p dist/engine
           WASM="$(find build/openvic-web -type f -name 'libopenvic*.wasm' | head -n 1)"
           test -n "$WASM"
           cp "$WASM" dist/engine/libopenvic.web.template_release.wasm32.nothreads.wasm
-          cp vendor/OpenVic/game/bin/openvic.gdextension dist/engine/openvic.gdextension
           printf '%s\n' 'd3361890c62ede9464eb41af7f797e87dedf4b28' > dist/engine/OPENVIC_COMMIT
           ls -lh dist/engine
 
-      - name: Upload WebAssembly engine artifact
+      - name: Upload engine artifact
         uses: actions/upload-artifact@v4
         with:
           name: openvic-web-extension
           path: dist/engine
           if-no-files-found: error
+
+      - name: Prepare OpenVic Godot project for Web
+        run: python3 scripts/prepare_openvic_godot_web.py
+
+      - name: Build temporary Linux extension for Godot editor import
+        working-directory: vendor/OpenVic
+        run: |
+          cmake --preset linux-x64-template_release -DOPENVIC_USE_PCH=OFF -DOPENVIC_SIM_BUILD_HEADLESS=OFF -DOPENVIC_SIM_BUILD_TESTS=OFF -DOPENVIC_SIM_BUILD_BENCHMARKS=OFF
+          cmake --build --preset linux-x64-template_release --parallel 4
+
+      - name: Install WebAssembly extension into Godot project
+        run: |
+          mkdir -p vendor/OpenVic/game/bin/openvic
+          cp dist/engine/libopenvic.web.template_release.wasm32.nothreads.wasm vendor/OpenVic/game/bin/openvic/
+          test -f vendor/OpenVic/game/bin/openvic/openvic.gdextension
+          grep -F 'web.wasm32.single.release' vendor/OpenVic/game/bin/openvic/openvic.gdextension
+          ls -lh vendor/OpenVic/game/bin/openvic
+
+      - name: Download Godot 4.7.2 Linux editor
+        run: |
+          curl -L --fail --retry 3 https://github.com/godotengine/godot/releases/download/4.7.2-stable/Godot_v4.7.2-stable_linux.x86_64.zip -o /tmp/godot.zip
+          mkdir -p /tmp/godot
+          unzip -q /tmp/godot.zip -d /tmp/godot
+          GODOT="$(find /tmp/godot -maxdepth 1 -type f -name 'Godot*' | head -n 1)"
+          test -n "$GODOT"
+          chmod +x "$GODOT"
+          echo "GODOT=$GODOT" >> "$GITHUB_ENV"
+          "$GODOT" --version
+
+      - name: Fetch official Web GDExtension single-thread template
+        run: |
+          python3 -m pip install --user remotezip
+          python3 - <<'PY'
+          from pathlib import Path
+          from remotezip import RemoteZip
+
+          url = "https://github.com/godotengine/godot/releases/download/4.7.2-stable/Godot_v4.7.2-stable_export_templates.tpz"
+          out = Path.home() / ".local/share/godot/export_templates/4.7.2.stable"
+          out.mkdir(parents=True, exist_ok=True)
+
+          with RemoteZip(url) as archive:
+              matches = [
+                  name for name in archive.namelist()
+                  if name.endswith("/web_dlink_nothreads_release.zip")
+                  or name == "web_dlink_nothreads_release.zip"
+              ]
+              if not matches:
+                  raise SystemExit("Official web_dlink_nothreads_release.zip template not found")
+              payload = archive.read(matches[0])
+
+          target = out / "web_dlink_nothreads_release.zip"
+          target.write_bytes(payload)
+          print(f"Installed {target} ({target.stat().st_size} bytes)")
+          PY
+
+      - name: Import Godot project
+        run: "$GODOT" --headless --path vendor/OpenVic/game --import
+
+      - name: Export browser-native Victoria II client
+        run: |
+          mkdir -p dist/site
+          "$GODOT" --headless --path vendor/OpenVic/game --export-release "Web" "$GITHUB_WORKSPACE/dist/site/index.html"
+          echo "=== Web export ==="
+          find dist/site -maxdepth 1 -type f -printf "%f %k KB\n" | sort
+
+      - name: Verify proprietary Victoria II data is absent
+        run: |
+          test ! -e dist/site/v2game.exe
+          test ! -e dist/site/victoria2.exe
+          if find dist/site -type f \( -iname 'provinces.bmp' -o -iname 'definition.csv' \) | grep -q .; then
+            echo "ERROR: proprietary Victoria II data entered the public site artifact"
+            exit 1
+          fi
+          grep -F "Confirmo que os arquivos selecionados pertencem a uma cópia legítima" dist/site/index.html
+
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload native site artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist/site
+
+      - name: Deploy native site
+        id: deployment
+        uses: actions/deploy-pages@v4
