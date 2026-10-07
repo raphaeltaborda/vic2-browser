@@ -155,7 +155,8 @@ jobs:
           PY
 
       - name: Import Godot project
-        run: "$GODOT" --headless --path vendor/OpenVic/game --import
+        run: |
+          "$GODOT" --headless --path vendor/OpenVic/game --import
 
       - name: Export browser-native Victoria II client
         run: |
