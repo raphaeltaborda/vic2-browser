@@ -113,6 +113,66 @@ jobs:
           test -s dist/site/index.side.wasm
           grep -F "Confirmo que os arquivos selecionados pertencem a uma cópia legítima" dist/site/index.html
 
+      - name: Smoke-test Godot and OpenVic in Chromium
+        run: |
+          python3 -m pip install --user --break-system-packages playwright
+
+          CHROME="$(command -v google-chrome || command -v chromium || command -v chromium-browser || true)"
+          test -n "$CHROME"
+          echo "CHROME=$CHROME" >> "$GITHUB_ENV"
+
+          python3 -m http.server 8765 --directory dist/site >/tmp/openvic-http.log 2>&1 &
+          SERVER_PID=$!
+          trap 'kill "$SERVER_PID" 2>/dev/null || true' EXIT
+
+          python3 - <<'PY'
+          import asyncio
+          import os
+          import time
+          from playwright.async_api import async_playwright
+
+          async def main():
+              async with async_playwright() as p:
+                  browser = await p.chromium.launch(
+                      headless=True,
+                      executable_path=os.environ["CHROME"],
+                      args=["--no-sandbox", "--disable-dev-shm-usage"],
+                  )
+                  page = await browser.new_page()
+                  console_lines = []
+                  page.on("console", lambda msg: console_lines.append(f"[{msg.type}] {msg.text}"))
+                  page.on("pageerror", lambda exc: console_lines.append(f"[pageerror] {exc}"))
+
+                  await page.goto("http://127.0.0.1:8765/", wait_until="domcontentloaded", timeout=30_000)
+
+                  deadline = time.monotonic() + 120
+                  last = None
+                  while time.monotonic() < deadline:
+                      godot = (await page.locator("#godot-state").inner_text()).strip()
+                      openvic = (await page.locator("#openvic-state").inner_text()).strip()
+                      error = (await page.locator("#error").inner_text()).strip()
+                      state = (godot, openvic, error)
+                      if state != last:
+                          print("runtime state:", state)
+                          last = state
+
+                      if godot == "carregado" and openvic == "carregado":
+                          print("Browser smoke test passed.")
+                          await browser.close()
+                          return
+
+                      if godot == "falha" or openvic == "falha" or error:
+                          print("\n".join(console_lines[-100:]))
+                          raise SystemExit(f"Browser runtime failed: {state}")
+
+                      await page.wait_for_timeout(1000)
+
+                  print("\n".join(console_lines[-100:]))
+                  raise SystemExit(f"Browser runtime timed out: {last}")
+
+          asyncio.run(main())
+          PY
+
       - name: Upload export for inspection
         uses: actions/upload-artifact@v4
         with:
