@@ -165,7 +165,7 @@
         log('OpenVic side module: ' + openvicLib);
         setState(openvicState, 'pending', 'validando WASM…');
 
-        const openvicResponse = await fetch(openvicLib, { cache: 'force-cache' });
+        const openvicResponse = await fetch(openvicLib, { cache: 'reload' });
         if (!openvicResponse.ok) {
           throw new Error('Falha ao baixar OpenVic WASM: HTTP ' + openvicResponse.status);
         }
