@@ -51,12 +51,14 @@ the GDExtension with Emscripten.
 - Compiled as wasm32, single precision, no pthreads.
 - Replaced simulation thread-pool execution with deterministic serial execution
   for the no-threads browser target.
-- Replaced the Godot loading-screen worker Thread with synchronous Web startup.
+- Replaced the Godot loading-screen worker Thread with a deferred main-thread Web startup for the first no-pthreads build.
 - Disabled desktop-only window/monitor/fullscreen operations on Web.
 - Switched the project to Godot's GL Compatibility renderer for WebGL.
 - Added a custom HTML launcher that initializes OpenVic WASM before accepting
   a local Victoria II installation.
 - Mounted user data directly into Emscripten MEMFS instead of uploading it.
+- Added a browser smoke test that requires both Godot and the OpenVic GDExtension to reach a loaded state before Pages publication.
+- Reveal the Godot canvas before starting the mounted-data boot path so the loading UI can render before heavy compatibility parsing.
 
 ## Why single-thread first
 
@@ -74,3 +76,22 @@ Mod support is intentionally deferred. OpenVic compatibility mode already has
 a concept of mod load lists. Once the base game works in the browser, the local
 loader can mount mod folders beside `/vic2` and pass the corresponding
 `--mod` arguments.
+
+
+## Current runtime milestone
+
+The public Web runtime now passes an automated Chromium smoke test with both
+Godot and the OpenVic WebAssembly GDExtension loaded.
+
+The local Victoria II folder selection and MEMFS copy path can reach a complete
+mount under `/vic2`. Work is currently focused on the next boundary: entering
+OpenVic compatibility-mode startup with those mounted files and keeping the
+single-thread browser responsive enough to show useful loading feedback.
+
+## CI notes
+
+The WebAssembly side module is built separately and reused by Web-shell
+validation runs. Godot export validation still builds the native Linux editor
+GDExtension used by the Godot editor import/export process. That Linux build is
+the main remaining CI performance cost and should be cached or promoted to a
+reusable artifact once the runtime path is stable.
