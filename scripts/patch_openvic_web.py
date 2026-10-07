@@ -389,8 +389,8 @@ dl = dataloader_cpp.read_text(encoding="utf-8")
 if "#include <cstdio>" not in dl:
     # Insert after the file's first local include, preserving upstream layout.
     first_include = dl.find("#include")
-    first_nl = dl.find("\\n", first_include)
-    dl = dl[:first_nl + 1] + "#include <cstdio>\\n" + dl[first_nl + 1:]
+    first_nl = dl.find("\n", first_include)
+    dl = dl[:first_nl + 1] + "#include <cstdio>\n" + dl[first_nl + 1:]
 dl_old = """bool Dataloader::load_defines(
 \tGameRulesManager const& game_rules_manager,
 \tDefinitionManager& definition_manager
@@ -486,6 +486,34 @@ if iface_new not in dl:
     if iface_old not in dl:
         raise SystemExit("Pinned interface loader changed; refusing blind patch.")
     dl = dl.replace(iface_old, iface_new, 1)
+
+# Distinguish parser construction, file reading, and parsing for the first file.
+# Restrict this detailed trace to sound.sfx instead of logging every game file.
+parser_old = """static Parser _run_ovdl_parser(fs::path const& path) {
+\tParser parser;"""
+parser_new = """static Parser _run_ovdl_parser(fs::path const& path) {
+#if defined(__EMSCRIPTEN__)
+\tconst bool trace_sound = path.filename() == "sound.sfx";
+\tif (trace_sound) { std::puts("[WebLoadRaw] sound.sfx: constructing parser"); std::fflush(stdout); }
+#endif
+\tParser parser;
+#if defined(__EMSCRIPTEN__)
+\tif (trace_sound) { std::puts("[WebLoadRaw] sound.sfx: parser constructed"); std::fflush(stdout); }
+#endif"""
+if parser_old not in dl:
+    raise SystemExit("Pinned parser construction changed; refusing blind patch.")
+dl = dl.replace(parser_old, parser_new, 1)
+read_old = "\tparser.load_from_file(path);"
+read_new = """#if defined(__EMSCRIPTEN__)
+\tif (trace_sound) { std::puts("[WebLoadRaw] sound.sfx: reading file"); std::fflush(stdout); }
+#endif
+\tparser.load_from_file(path);
+#if defined(__EMSCRIPTEN__)
+\tif (trace_sound) { std::puts("[WebLoadRaw] sound.sfx: file read"); std::fflush(stdout); }
+#endif"""
+if read_old not in dl:
+    raise SystemExit("Pinned parser file read changed; refusing blind patch.")
+dl = dl.replace(read_old, read_new, 1)
 
 dataloader_cpp.write_text(dl, encoding="utf-8")
 print("Raw Web definition-loader diagnostics patched.")

@@ -107,6 +107,16 @@ jobs:
         run: |
           python3 - <<'PY'
           from pathlib import Path
+          import hashlib
+
+          expected_patch = hashlib.sha256(Path("scripts/patch_openvic_web.py").read_bytes()).hexdigest()
+          for folder in ("engine-artifact", "editor-artifact"):
+              fingerprint = Path(folder) / "PORT_PATCH_SHA256"
+              if not fingerprint.is_file() or fingerprint.read_text().strip() != expected_patch:
+                  raise SystemExit(
+                      f"{folder} was built with different port patches. "
+                      "Run Build OpenVic Web port for this revision before exporting."
+                  )
 
           wasm = Path("engine-artifact/libopenvic.web.template_release.wasm32.threads.wasm")
           magic = wasm.read_bytes()[:8]

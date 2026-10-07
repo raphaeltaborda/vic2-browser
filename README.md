@@ -17,7 +17,7 @@ Browser
   │    ├─ index.wasm
   │    └─ index.side.wasm
   ├─ OpenVic GDExtension
-  │    └─ libopenvic.web.template_release.wasm32.nothreads.wasm
+  │    └─ libopenvic.web.template_release.wasm32.threads.wasm
   └─ user-supplied Victoria II data
        └─ mounted locally in Emscripten MEMFS at /vic2
 ```
@@ -39,7 +39,7 @@ Working:
 In progress:
 
 - completing the transition from a fully mounted Victoria II data set to the OpenVic game/menu startup path;
-- improving the single-thread Web loading experience;
+- diagnosing compatibility loading at the initial sound/interface phase;
 - reducing CI rebuild time for the native Linux editor extension.
 
 ## CI pipeline
@@ -71,12 +71,12 @@ d3361890c62ede9464eb41af7f797e87dedf4b28
 Toolchain currently targeted by CI:
 
 - Godot: **4.7.2**
-- Emscripten: **4.0.11**
+- Emscripten: **4.0.20**
 - wasm32
 - single precision
-- no pthreads for the first browser target
+- pthreads enabled (8 Emscripten workers / 4 Godot workers)
 
-The first browser build is intentionally single-threaded to avoid making `SharedArrayBuffer` and cross-origin isolation prerequisites.
+The browser build requires `SharedArrayBuffer` and cross-origin isolation. The Godot Service Worker provides COOP/COEP on GitHub Pages.
 
 ## Local Victoria II data
 
@@ -89,6 +89,8 @@ map/definition.csv
 map/provinces.bmp
 localisation/
 history/
+interface/sound.sfx
+interface/core.gui
 ```
 
 `v2game.exe` is used only as an installation marker. Windows executables and DLLs are deliberately **not copied into the Web filesystem and are never executed**.
@@ -106,3 +108,25 @@ Do **not** commit or deploy:
 Only original port code, build scripts, and redistributable open-source dependencies belong in this repository.
 
 See `docs/NATIVE_WEB_PORT.md` for implementation details and `THIRD_PARTY_NOTICES.md` for upstream notices.
+
+## Launcher and loading diagnostics
+
+The launcher keeps installation files local, skips mods, saves, map caches and
+Windows binaries, and shows only the bytes actually copied to MEMFS. Once loading
+starts, changing the installation is disabled. A failed start requires a page
+reload because a partially started Godot instance cannot safely be started twice.
+
+The diagnostics panel remains accessible over the game canvas. It retains the
+last 500 log lines and understands both `[WebLoad]` and `[WebLoadRaw]` markers.
+A 45-second silence notice identifies the last phase; it is not proof of a deadlock.
+The in-game 15% value covers the whole compatibility loader, not measured byte progress.
+
+Native artifacts carry a SHA-256 fingerprint of the port patch script. Export
+refuses artifacts from different patches, including older artifacts without the
+fingerprint. After changing the C++ patches, rebuild **both** native extensions
+before exporting. An engine-only smoke test does not prove a full game can load.
+
+Current investigation: the sound/interface diagnostic build at `983633b` compiled
+its WASM job but its Linux job was cancelled, so that revision was not published.
+The new trace distinguishes sound parser construction from file reading. A real
+installation run is still required to identify and verify the 15% stall.

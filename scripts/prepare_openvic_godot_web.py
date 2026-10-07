@@ -94,6 +94,27 @@ if '[WebLoad] setting roots' not in gs:
 game_start.write_text(gs, encoding="utf-8")
 
 
+# Do not report successful loading or open the menu after invalid data.
+gs = game_start.read_text(encoding="utf-8")
+if "func _load_compatibility_mode() -> bool:" not in gs:
+    replacements = {
+        "func _load_compatibility_mode() -> void:": "func _load_compatibility_mode() -> bool:",
+        '\t\tpush_error("Errors setting game roots!")':
+            '\t\tpush_error("Errors setting game roots!")\n\t\treturn false',
+        '\t\tpush_error("Errors loading game defines!")':
+            '\t\tpush_error("Errors loading game defines!")\n\t\treturn false',
+        '\tprint("[WebLoad] compatibility load complete")':
+            '\tprint("[WebLoad] compatibility load complete")\n\treturn true',
+        '\t_load_compatibility_mode()\n':
+            '\tif not _load_compatibility_mode():\n\t\tpush_error("[WebLoad] Loading failed; menu startup cancelled.")\n\t\treturn\n',
+    }
+    for old, new in replacements.items():
+        if gs.count(old) != 1:
+            raise SystemExit(f"GameStart failure-handling anchor changed: {old}")
+        gs = gs.replace(old, new, 1)
+    game_start.write_text(gs, encoding="utf-8")
+
+
 # Godot's GL Compatibility/WebGL2 backend does not support GLSL fma() on
 # low-end platforms. These two calls are ordinary affine operations, so
 # replacing them with multiply+add preserves the intended calculation.
@@ -127,7 +148,7 @@ for function in ("_resolution_apply", "_screen_mode_apply", "_monitor_selection_
         g = g[:body + 1] + guard + g[body + 1:]
 settings.write_text(g, encoding="utf-8")
 
-# Add a real Godot Web export preset with GDExtension support and no pthreads.
+# Add a real Godot Web export preset with GDExtension support and pthreads.
 presets = GAME / "export_presets.cfg"
 p = presets.read_text(encoding="utf-8")
 if 'Web="Web"' not in p:

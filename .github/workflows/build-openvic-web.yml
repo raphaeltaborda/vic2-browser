@@ -33,7 +33,7 @@ jobs:
 
       - name: Install build tools
         run: |
-          sudo apt-get update
+          sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 update
           sudo apt-get install -y ninja-build cmake python3 pkg-config ccache
 
       - name: Restore wasm compiler cache
@@ -115,6 +115,7 @@ jobs:
       - name: Collect and validate extension
         run: |
           mkdir -p dist/engine
+          sha256sum scripts/patch_openvic_web.py | cut -d ' ' -f1 > dist/engine/PORT_PATCH_SHA256
           WASM="$(find build/openvic-web -type f -name 'libopenvic*.wasm' | head -n 1)"
           test -n "$WASM"
 
@@ -160,7 +161,7 @@ jobs:
 
       - name: Install native build tools
         run: |
-          sudo apt-get update
+          sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 update
           sudo apt-get install -y ninja-build cmake python3 pkg-config libtbb-dev ccache
 
       - name: Restore Linux editor compiler cache
@@ -199,6 +200,7 @@ jobs:
       - name: Collect Linux editor extension
         run: |
           mkdir -p dist/editor
+          sha256sum scripts/patch_openvic_web.py | cut -d ' ' -f1 > dist/editor/PORT_PATCH_SHA256
           LIB="$(find vendor/OpenVic/game/bin/openvic -type f -name 'libopenvic.linux.editor.x86_64.so' | head -n 1)"
           test -n "$LIB"
           cp "$LIB" dist/editor/libopenvic.linux.editor.x86_64.so
