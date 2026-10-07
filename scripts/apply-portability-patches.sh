@@ -15,23 +15,23 @@ verify_repo() {
   local dir="$2"
   local expected="$3"
 
-  [[ -d "$dir/.git" || -f "$dir/.git" ]] || {
+  if [[ ! -d "$dir/.git" && ! -f "$dir/.git" ]]; then
     echo "$label checkout not found: $dir" >&2
     exit 1
-  }
+  fi
 
   local actual
   actual="$(git -C "$dir" rev-parse HEAD)"
-  [[ "$actual" == "$expected" ]] || {
+  if [[ "$actual" != "$expected" ]]; then
     echo "$label revision mismatch: expected $expected, got $actual" >&2
     exit 1
-  }
+  fi
 
-  [[ -z "$(git -C "$dir" status --porcelain --untracked-files=no)" ]] || {
+  if [[ -n "$(git -C "$dir" status --porcelain --untracked-files=no)" ]]; then
     echo "$label checkout is dirty before patching" >&2
     git -C "$dir" status --short >&2
     exit 1
-  }
+  fi
 }
 
 apply_patch() {
@@ -49,8 +49,9 @@ verify_repo "OpenVic" "$OPENVIC_DIR" "$OPENVIC_COMMIT"
 verify_repo "OpenVic scripts" "$SCRIPTS_DIR" "$OPENVIC_SCRIPTS_COMMIT"
 verify_repo "OpenVic-Simulation" "$SIM_DIR" "$OPENVIC_SIMULATION_COMMIT"
 
-apply_patch "OpenVic Web target" "$OPENVIC_DIR"   "$ROOT/patches/openvic/0001-emscripten-side-module.patch"
-apply_patch "libc++ ABI namespace" "$SCRIPTS_DIR"   "$ROOT/patches/openvic-scripts/0001-portable-libcpp-abi-namespace.patch"
-apply_patch "wasm32 hashing" "$SIM_DIR"   "$ROOT/patches/openvic-simulation/0001-wasm32-size-t-hashing.patch"
+apply_patch "OpenVic Web target" "$OPENVIC_DIR" "$ROOT/patches/openvic/0001-emscripten-side-module.patch"
+apply_patch "OpenVic Web descriptor" "$OPENVIC_DIR" "$ROOT/patches/openvic/0002-web-gdextension-library.patch"
+apply_patch "libc++ ABI namespace" "$SCRIPTS_DIR" "$ROOT/patches/openvic-scripts/0001-portable-libcpp-abi-namespace.patch"
+apply_patch "wasm32 hashing" "$SIM_DIR" "$ROOT/patches/openvic-simulation/0001-wasm32-size-t-hashing.patch"
 
 echo "Portability patch series applied cleanly."
