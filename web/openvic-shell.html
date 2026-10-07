@@ -273,7 +273,7 @@
     async function copyProjectPack() {
       const pack = GODOT_CONFIG.mainPack || (GODOT_CONFIG.executable + '.pck');
       status.textContent = 'Carregando projeto OpenVic…';
-      const response = await fetch(pack);
+      const response = await fetch(pack, { cache: 'reload' });
       if (!response.ok) throw new Error('Falha ao carregar o projeto Web: HTTP ' + response.status);
       engine.copyToFS('/' + pack.replace(/^\//, ''), await response.arrayBuffer());
       return pack;
@@ -323,18 +323,38 @@
         mountProgress.value = 4;
         await mountVictoria();
 
-        status.textContent = 'Iniciando OpenVic com os dados do Victoria II…';
+        mountProgress.value = 100;
+        status.textContent = 'Dados montados. Abrindo OpenVic…';
         log('Executando OpenVic com --base-path=/vic2.');
 
-        await engine.start({
-          canvas,
-          args: ['--main-pack', pack, '--', '--base-path=/vic2'],
-        });
-
+        // Make the rendering surface visible before callMain(). OpenVic performs
+        // its compatibility-data load synchronously on the first no-threads Web
+        // build, so waiting to reveal the canvas until engine.start() resolves
+        // can leave the launcher apparently frozen at 100%.
         launcher.style.display = 'none';
         canvas.style.display = 'block';
         canvas.focus();
+        await new Promise(requestAnimationFrame);
+        await new Promise(requestAnimationFrame);
+
+        const startTimeout = new Promise((_, reject) => {
+          setTimeout(() => reject(new Error(
+            'Timeout ao iniciar o projeto Godot depois da montagem dos dados. Consulte o log do navegador.'
+          )), 120000);
+        });
+
+        await Promise.race([
+          engine.start({
+            canvas,
+            args: ['--main-pack', pack, '--', '--base-path=/vic2'],
+          }),
+          startTimeout,
+        ]);
+
+        log('Godot iniciou o projeto; OpenVic está processando os dados montados em /vic2.');
       } catch (err) {
+        launcher.style.display = 'grid';
+        canvas.style.display = 'none';
         showError(err);
         status.textContent = 'Falha ao iniciar.';
         launchButton.disabled = false;
