@@ -48,7 +48,6 @@ jobs:
         uses: emscripten-core/setup-emsdk@v16
         with:
           version: ${{ env.EMSCRIPTEN_VERSION }}
-          no-cache: true
 
       - name: Verify toolchain
         run: |
@@ -192,7 +191,7 @@ jobs:
             -DOPENVIC_SIM_BUILD_HEADLESS=OFF \
             -DOPENVIC_SIM_BUILD_TESTS=OFF \
             -DOPENVIC_SIM_BUILD_BENCHMARKS=OFF
-          cmake --build --preset linux-x64-editor --parallel 4
+          cmake --build --preset linux-x64-editor --target openvic --parallel 4
           ccache --show-stats
 
       - name: Collect Linux editor extension
@@ -201,7 +200,9 @@ jobs:
           LIB="$(find vendor/OpenVic/game/bin/openvic -type f -name 'libopenvic.linux.editor.x86_64.so' | head -n 1)"
           test -n "$LIB"
           cp "$LIB" dist/editor/libopenvic.linux.editor.x86_64.so
+          strip --strip-unneeded dist/editor/libopenvic.linux.editor.x86_64.so
           test -s dist/editor/libopenvic.linux.editor.x86_64.so
+          nm -D dist/editor/libopenvic.linux.editor.x86_64.so | grep -F 'openvic_library_init'
           file dist/editor/libopenvic.linux.editor.x86_64.so
           ls -lh dist/editor
 
