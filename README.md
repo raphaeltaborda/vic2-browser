@@ -1,59 +1,67 @@
 # Victoria II Browser — native Web port
 
-This repository is an experimental **native web port** of a Victoria II-compatible engine.
-
-## Non-negotiable design rule
-
-**No Victoria II game files are hosted or committed here.**
-
-The web client requires the player to supply their own legitimate Victoria II installation locally. Proprietary Paradox files are read in the browser and are not part of the public GitHub repository or GitHub Pages deployment.
+Experimental native WebAssembly port of a Victoria II-compatible engine.
 
 ## Architecture
 
 ```text
+OpenVic C++ / Godot project
+        |
+        | compile
+        v
+Godot Web + OpenVic GDExtension
+        |
+        | WebAssembly
+        v
 Browser
-  ├─ HTML / JavaScript loader
-  ├─ Godot Web runtime (WebAssembly)
-  ├─ OpenVic GDExtension (WebAssembly)
-  └─ User-supplied legitimate Victoria II data
-       ├─ common/
-       ├─ history/
-       ├─ map/
-       ├─ localisation/
-       ├─ events/
-       ├─ decisions/
-       ├─ gfx/
-       └─ other required game data
+        |
+        | reads user-supplied local files
+        v
+Legitimate Victoria II data
 ```
 
-There is **no Wine, BoxedWine, x86 emulation, or Windows executable execution** in the final architecture.
+The Victoria II installation is **data input**, not something converted into WebAssembly.
 
-## Upstream engine
+A copy stored in Google Drive can be useful as the user's source/backup copy, but the intended runtime boundary is still local: the browser receives files explicitly selected by the user and OpenVic reads them through the browser filesystem.
 
-The port is based on OpenVic/OpenVic-Simulation, pinned while porting to:
+There is no Wine, BoxedWine, x86 emulation, or execution of `v2game.exe` in the target architecture.
+
+## Pinned toolchain
 
 - OpenVic: `d3361890c62ede9464eb41af7f797e87dedf4b28`
+- Godot: `4.7.2-stable`
+- Emscripten: `4.0.11`
+- Web target: `wasm32`, single-thread first
 
-OpenVic is intended to faithfully recreate Victoria II: Heart of Darkness and supports loading Victoria II data for legitimate owners.
+The Emscripten version is intentionally aligned with the one used by Godot 4.7.2's own Web build workflow.
 
-## Current build milestone
+## Milestones
 
-The build job compiles the OpenVic C++ GDExtension as a native WebAssembly side module:
+1. **WASM extension**
+   - Compile the OpenVic GDExtension as a Godot-compatible WebAssembly side module.
+   - Produce `libopenvic.web.template_release.wasm32.nothreads.wasm`.
+2. **Godot Web export**
+   - Export the OpenVic Godot project using the Compatibility renderer and Web GDExtension support.
+3. **Local Victoria II data**
+   - Validate a legitimate installation selected in the browser.
+   - Mount `common/`, `history/`, `map/`, `localisation/`, `events/`, `decisions/`, `gfx/`, and the other required data under the browser filesystem.
+4. **First native boot**
+   - Start OpenVic with the mounted Victoria II base path and reach the main menu.
+5. **Playable campaign**
+   - Fix remaining Web-specific renderer, audio, filesystem, memory, and performance issues.
 
-```text
-OpenVic C++ -> Emscripten -> libopenvic.web.template_release.wasm32.nothreads.wasm
-```
-
-The first browser target is intentionally single-threaded to maximize Brave/Chromium compatibility and avoid making SharedArrayBuffer a prerequisite.
+The current CI intentionally stops at milestone 1. The site export will only be re-enabled after the native OpenVic WASM extension builds reproducibly.
 
 ## Copyright boundary
 
-Do **not** commit or deploy:
+No proprietary Victoria II content is committed or deployed.
+
+Do **not** commit:
 
 - `v2game.exe`
 - `victoria2.exe`
-- Victoria II game directories/assets
+- Victoria II game directories or assets
 - Steam depots
-- user-provided ZIPs
+- user-provided archives
 
 Only original port code, build scripts, and redistributable open-source dependencies belong in this repository.
