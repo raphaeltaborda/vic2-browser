@@ -2,7 +2,9 @@ name: Build OpenVic Web port
 
 on:
   push:
-    branches: ["main"]
+    branches:
+      - main
+      - native-web-foundation-fixes
     paths:
       - ".github/workflows/build-openvic-web.yml"
       - "scripts/patch_openvic_web.py"
@@ -10,6 +12,10 @@ on:
 
 permissions:
   contents: read
+
+env:
+  OPENVIC_COMMIT: d3361890c62ede9464eb41af7f797e87dedf4b28
+  EMSCRIPTEN_VERSION: 4.0.11
 
 jobs:
   wasm-extension:
@@ -23,64 +29,92 @@ jobs:
       - name: Install build tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y ninja-build cmake python3 python3-pip pkg-config
+          sudo apt-get install -y ninja-build cmake python3 pkg-config
 
-      - name: Install Emscripten
-        uses: mymindstorm/setup-emsdk@v14
+      - name: Install Emscripten used by Godot 4.7.2
+        uses: emscripten-core/setup-emsdk@v16
         with:
-          version: 4.0.12
-          actions-cache-folder: emsdk-cache
+          version: ${{ env.EMSCRIPTEN_VERSION }}
+          no-cache: true
 
-      - name: Verify Emscripten
+      - name: Verify toolchain
         run: |
           emcc --version
           em++ --version
+          cmake --version
+          ninja --version
 
       - name: Fetch pinned OpenVic source
         run: |
           mkdir -p vendor
           git clone --recursive https://github.com/OpenVicProject/OpenVic.git vendor/OpenVic
           cd vendor/OpenVic
-          git checkout --detach d3361890c62ede9464eb41af7f797e87dedf4b28
+          git checkout --detach "${OPENVIC_COMMIT}"
           git submodule update --init --recursive
 
-      - name: Apply web port patch
+      - name: Apply WebAssembly port patch
         run: python3 scripts/patch_openvic_web.py
 
-      - name: Configure OpenVic for WebAssembly
+      - name: Configure OpenVic for wasm32 single-thread
         run: |
-          emcmake cmake             -S vendor/OpenVic             -B build/openvic-web             -G Ninja             -DCMAKE_BUILD_TYPE=Release             -DGODOTCPP_TARGET=template_release             -DGODOTCPP_THREADS=OFF             -DGODOTCPP_PRECISION=single             -DOPENVIC_USE_PCH=OFF             -DOPENVIC_SIM_BUILD_HEADLESS=OFF             -DOPENVIC_SIM_BUILD_TESTS=OFF             -DOPENVIC_SIM_BUILD_BENCHMARKS=OFF
+          emcmake cmake \
+            -S vendor/OpenVic \
+            -B build/openvic-web \
+            -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DGODOTCPP_TARGET=template_release \
+            -DGODOTCPP_THREADS=OFF \
+            -DGODOTCPP_PRECISION=single \
+            -DOPENVIC_USE_PCH=OFF \
+            -DOPENVIC_SIM_BUILD_HEADLESS=OFF \
+            -DOPENVIC_SIM_BUILD_TESTS=OFF \
+            -DOPENVIC_SIM_BUILD_BENCHMARKS=OFF
 
-      - name: Patch foonathan-memory for current libc++ ABI namespace
+      - name: Patch legacy foonathan-memory libc++ ABI references
         run: |
           python3 - <<'PY'
           from pathlib import Path
+
           root = Path("build/openvic-web/_deps/memory-src")
           changed = 0
+
           for path in root.rglob("*.hpp"):
-              text = path.read_text(encoding="utf-8")
-              if "std::__1::" in text:
-                  path.write_text(text.replace("std::__1::", "std::_LIBCPP_ABI_NAMESPACE::"), encoding="utf-8")
-                  changed += 1
-          print(f"Patched {changed} foonathan-memory header(s)")
-          if changed == 0:
-              raise SystemExit("Expected libc++ __1 references were not found.")
+              source = path.read_text(encoding="utf-8")
+              if "std::__1::" not in source:
+                  continue
+              path.write_text(
+                  source.replace("std::__1::", "std::_LIBCPP_ABI_NAMESPACE::"),
+                  encoding="utf-8",
+              )
+              changed += 1
+
+          print(f"Patched {changed} foonathan-memory header(s).")
           PY
 
       - name: Build OpenVic WebAssembly extension
         run: |
-          cmake --build build/openvic-web --target openvic --parallel 4
-          echo "=== WebAssembly outputs ==="
-          find build/openvic-web vendor/OpenVic/game/bin/openvic -type f             \( -name "*.wasm" -o -name "*.a" \) -printf "%p %k KB\n" | sort
+          cmake --build build/openvic-web --target openvic --parallel 2
 
-      - name: Collect extension
+          echo "=== WebAssembly outputs ==="
+          find build/openvic-web vendor/OpenVic/game/bin/openvic \
+            -type f \( -name "*.wasm" -o -name "*.a" \) \
+            -printf "%p %k KB\n" | sort
+
+      - name: Collect and validate extension
         run: |
           mkdir -p dist/engine
+
           WASM="$(find build/openvic-web -type f -name 'libopenvic*.wasm' | head -n 1)"
           test -n "$WASM"
+
           cp "$WASM" dist/engine/libopenvic.web.template_release.wasm32.nothreads.wasm
           cp vendor/OpenVic/game/bin/openvic.gdextension dist/engine/openvic.gdextension
-          printf '%s\n' 'd3361890c62ede9464eb41af7f797e87dedf4b28' > dist/engine/OPENVIC_COMMIT
+          printf '%s\n' "$OPENVIC_COMMIT" > dist/engine/OPENVIC_COMMIT
+          printf '%s\n' "$EMSCRIPTEN_VERSION" > dist/engine/EMSCRIPTEN_VERSION
+
+          grep -Fq 'web.wasm32.single.release' dist/engine/openvic.gdextension
+          test -s dist/engine/libopenvic.web.template_release.wasm32.nothreads.wasm
+
           ls -lh dist/engine
 
       - name: Upload WebAssembly engine artifact
