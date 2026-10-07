@@ -114,6 +114,26 @@ if "func _load_compatibility_mode() -> bool:" not in gs:
         gs = gs.replace(old, new, 1)
     game_start.write_text(gs, encoding="utf-8")
 
+# Fix upstream playlist index bookkeeping exposed by the compatibility music list.
+# The old code built range(song_count - 1) and then called remove_at(title_index),
+# which crashes when the title track is the last song (e.g. index 3 in a 3-element
+# candidate array). Keep song IDs as values and erase by value instead of treating
+# them as positions. Also remember the actual selected track, not playlist cursor.
+music_manager = GAME / "src/Autoload/MusicManager/MusicManager.gd"
+mm = music_manager.read_text(encoding="utf-8")
+music_replacements = {
+    "\tlast_played = playlist_index\n": "\tlast_played = _selected_track\n",
+    "\tvar possible_indices = range(len(song_names) - 1)\n": "\tvar possible_indices = range(len(song_names))\n",
+    "\tpossible_indices.remove_at(title_index)\n": "\tif title_index != -1:\n\t\tpossible_indices.erase(title_index)\n",
+    "\t\tpossible_indices.remove_at(last_played)\n": "\t\tpossible_indices.erase(last_played)\n",
+}
+for old, new in music_replacements.items():
+    if old in mm:
+        mm = mm.replace(old, new, 1)
+    elif new not in mm:
+        raise SystemExit(f"MusicManager playlist anchor changed: {old!r}")
+music_manager.write_text(mm, encoding="utf-8")
+
 
 # Godot's GL Compatibility/WebGL2 backend does not support GLSL fma() on
 # low-end platforms. These two calls are ordinary affine operations, so
