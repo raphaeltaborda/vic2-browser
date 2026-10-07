@@ -62,6 +62,37 @@ if web_ready not in gs:
     gs = gs.replace(ready, web_ready, 1)
 game_start.write_text(gs, encoding="utf-8")
 
+# Add coarse browser-side startup markers around the monolithic C++ loader.
+gs = game_start.read_text(encoding="utf-8")
+load_fn = "func _load_compatibility_mode() -> void:\n"
+if '[WebLoad] setting roots' not in gs:
+    gs = gs.replace(
+        load_fn,
+        load_fn + '\tprint("[WebLoad] setting roots")\n',
+        1,
+    )
+    gs = gs.replace(
+        '\tCursorManager.initial_cursor_setup()\n',
+        '\tprint("[WebLoad] roots ready; cursor/title")\n\tCursorManager.initial_cursor_setup()\n',
+        1,
+    )
+    gs = gs.replace(
+        '\tif GameSingleton.load_defines_compatibility_mode(ModSettings.get_load_list()) != OK:\n',
+        '\tprint("[WebLoad] entering compatibility definitions")\n\tif GameSingleton.load_defines_compatibility_mode(ModSettings.get_load_list()) != OK:\n',
+        1,
+    )
+    gs = gs.replace(
+        '\tSoundSingleton.load_sounds()\n',
+        '\tprint("[WebLoad] definitions complete; loading audio")\n\tSoundSingleton.load_sounds()\n',
+        1,
+    )
+    gs = gs.replace(
+        '\tMusicManager.add_compat_songs()\n',
+        '\tMusicManager.add_compat_songs()\n\tprint("[WebLoad] compatibility load complete")\n',
+        1,
+    )
+game_start.write_text(gs, encoding="utf-8")
+
 # Browser canvas sizing/fullscreen are controlled by the HTML shell. Avoid
 # desktop-only monitor/fullscreen/VSync operations during startup.
 settings = GAME / "src/Autoload/Settings/GameSettings.gd"

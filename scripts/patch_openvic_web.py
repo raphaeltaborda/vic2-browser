@@ -94,6 +94,34 @@ print("OpenVic patched for wasm32/threads.")
 
 sim = OPENVIC / "extension" / "deps" / "openvic-simulation"
 
+# Add lightweight phase markers to the Victoria II compatibility loader so the
+# browser can expose the exact stage being processed instead of sitting at 15%.
+dataloader_cpp = sim / "src/openvic-simulation/dataloader/Dataloader.cpp"
+dl = dataloader_cpp.read_text(encoding="utf-8")
+markers = [
+    ('\tbool ret = true;\n\tif (!_load_sound_effect_defines(definition_manager)) {',
+     '\tbool ret = true;\n\tSPDLOG_INFO("[WebLoad] sound/interface/bootstrap");\n\tif (!_load_sound_effect_defines(definition_manager)) {'),
+    ('\tif (!definition_manager.get_define_manager().load_defines_file(',
+     '\tSPDLOG_INFO("[WebLoad] common/defines.lua");\n\tif (!definition_manager.get_define_manager().load_defines_file('),
+    ('\tif (!_load_goods(definition_manager)) {',
+     '\tSPDLOG_INFO("[WebLoad] goods/cultures/politics");\n\tif (!_load_goods(definition_manager)) {'),
+    ('\tif (!_load_map(definition_manager)) {',
+     '\tSPDLOG_INFO("[WebLoad] map + provinces");\n\tif (!_load_map(definition_manager)) {'),
+    ('\tif (!_load_units(definition_manager)) {',
+     '\tSPDLOG_INFO("[WebLoad] units/rebels/technology");\n\tif (!_load_units(definition_manager)) {'),
+    ('\tif (!_load_history(definition_manager)) {',
+     '\tSPDLOG_INFO("[WebLoad] history/events");\n\tif (!_load_history(definition_manager)) {'),
+    ('\treturn ret;\n}\n\nbool Dataloader::load_localisation_files',
+     '\tSPDLOG_INFO("[WebLoad] definitions parsed");\n\treturn ret;\n}\n\nbool Dataloader::load_localisation_files'),
+]
+for old, new in markers:
+    if new in dl:
+        continue
+    if old not in dl:
+        raise SystemExit(f"Dataloader diagnostic anchor changed: {old[:60]}")
+    dl = dl.replace(old, new, 1)
+dataloader_cpp.write_text(dl, encoding="utf-8")
+
 # OpenVic's pinned hash helpers assume a 64-bit size_t. wasm32 uses a 32-bit
 # size_t, where shifts by 32/33 are invalid and the 64-bit FNV constants are
 # truncated. Keep the desktop behavior unchanged and select proper 32-bit

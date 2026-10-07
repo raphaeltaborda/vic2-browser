@@ -225,7 +225,11 @@
             const line = args.join(' ');
             console.log(...args);
             log(line);
-            if (line.includes('Loading took ')) {
+            if (line.includes('[WebLoad]')) {
+              const phase = line.replace(/.*\[WebLoad\]\s*/, '').trim();
+              runtimeStatus.textContent = 'OpenVic · ' + phase;
+              runtimeStatus.style.display = 'block';
+            } else if (line.includes('Loading took ')) {
               runtimeStatus.textContent = 'OpenVic carregado · abrindo menu…';
               setTimeout(() => { runtimeStatus.style.display = 'none'; }, 1800);
             }
@@ -235,7 +239,7 @@
             console.error(...args);
             log('[Godot] ' + line);
             runtimeStatus.classList.add('error');
-            runtimeStatus.textContent = 'OpenVic reportou erro durante a inicialização. Consulte o log/console.';
+            runtimeStatus.textContent = 'OpenVic erro: ' + line.slice(0, 240);
             runtimeStatus.style.display = 'block';
           },
         }));
@@ -417,6 +421,17 @@
         starting = false;
       }
     }
+
+    window.addEventListener('error', event => {
+      runtimeStatus.classList.add('error');
+      runtimeStatus.textContent = 'JavaScript: ' + (event.message || 'erro desconhecido');
+      runtimeStatus.style.display = 'block';
+    });
+    window.addEventListener('unhandledrejection', event => {
+      runtimeStatus.classList.add('error');
+      runtimeStatus.textContent = 'Promise: ' + String(event.reason || 'rejeição não tratada').slice(0, 240);
+      runtimeStatus.style.display = 'block';
+    });
 
     launchButton.addEventListener('click', boot);
     initializeEngine();
