@@ -138,6 +138,15 @@ jobs:
           python3 scripts/patch_openvic_web.py
           python3 scripts/prepare_openvic_godot_web.py
 
+          SHADER="vendor/OpenVic/game/src/Systems/Session/Map/TerrainMap.gdshader"
+          if grep -nF 'fma(' "$SHADER"; then
+            echo "TerrainMap.gdshader still contains unsupported fma() after Web patch."
+            exit 1
+          fi
+          grep -Fq 'corner * corner_args.half_pixel_size + corner_args.uv' "$SHADER"
+          grep -Fq 'uv * map_size + vec2(0.5)' "$SHADER"
+          echo "WebGL shader compatibility patch verified."
+
       - name: Install reusable native extensions into project
         run: |
           mkdir -p vendor/OpenVic/game/bin/openvic

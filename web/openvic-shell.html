@@ -331,9 +331,25 @@
     async function copyProjectPack() {
       const pack = GODOT_CONFIG.mainPack || (GODOT_CONFIG.executable + '.pck');
       status.textContent = 'Carregando projeto OpenVic…';
-      const response = await fetch(pack, { cache: 'reload' });
+
+      // Godot's PWA Service Worker is required for cross-origin isolation on
+      // GitHub Pages, but an older worker/cache can otherwise keep serving a
+      // previous PCK after a deploy. Purge this origin's PWA caches and request
+      // the PCK through a unique URL, then install it in MEMFS under its normal
+      // name for --main-pack.
+      if ('caches' in globalThis) {
+        const keys = await caches.keys();
+        await Promise.all(keys.map(key => caches.delete(key)));
+        if (keys.length) log('Caches PWA removidos antes do PCK: ' + keys.length);
+      }
+
+      const packURL = new URL(pack, location.href);
+      packURL.searchParams.set('vic2_build', String(Date.now()));
+      const response = await fetch(packURL, { cache: 'no-store' });
       if (!response.ok) throw new Error('Falha ao carregar o projeto Web: HTTP ' + response.status);
-      engine.copyToFS('/' + pack.replace(/^\//, ''), await response.arrayBuffer());
+      const bytes = await response.arrayBuffer();
+      engine.copyToFS('/' + pack.replace(/^\//, ''), bytes);
+      log('PCK fresco carregado: ' + bytes.byteLength + ' bytes.');
       return pack;
     }
 
