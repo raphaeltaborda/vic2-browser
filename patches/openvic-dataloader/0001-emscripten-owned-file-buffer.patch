@@ -1,0 +1,68 @@
+diff --git a/src/openvic-dataloader/detail/ParseHandler.hpp b/src/openvic-dataloader/detail/ParseHandler.hpp
+index 213a63a..9770f93 100644
+--- a/src/openvic-dataloader/detail/ParseHandler.hpp
++++ b/src/openvic-dataloader/detail/ParseHandler.hpp
+@@ -1,6 +1,8 @@
+ #pragma once
+ 
+ #include <cstddef>
++#include <cerrno>
++#include <cstdio>
+ #include <optional>
+ #include <string>
+ #include <utility>
+@@ -44,12 +46,48 @@ namespace ovdl::detail {
+ 		}
+ 
+ 		buffer_error load_file(const char* path, std::optional<Encoding> fallback) {
++#if defined(__EMSCRIPTEN__)
++			std::FILE* file = std::fopen(path, "rb");
++			if (file == nullptr) {
++				switch (errno) {
++					case ENOENT:
++					case ENOTDIR:
++					case ELOOP:
++						return buffer_error::file_not_found;
++					case EACCES:
++					case EPERM:
++						return buffer_error::permission_denied;
++					default:
++						return buffer_error::os_error;
++				}
++			}
++
++			if (std::fseek(file, 0, SEEK_END) != 0) {
++				std::fclose(file);
++				return buffer_error::os_error;
++			}
++			long const end = std::ftell(file);
++			if (end < 0 || std::fseek(file, 0, SEEK_SET) != 0) {
++				std::fclose(file);
++				return buffer_error::os_error;
++			}
++
++			std::size_t const size = static_cast<std::size_t>(end);
++			std::string bytes(size, char(0));
++			if (size > 0 && std::fread(bytes.data(), 1, size, file) != size) {
++				std::fclose(file);
++				return buffer_error::os_error;
++			}
++			std::fclose(file);
++
++			lexy::buffer<lexy::default_encoding> buffer(bytes.data(), bytes.size());
++			if (buffer.data() == nullptr) {
++				return buffer_error::buffer_is_null;
++			}
++			return load_buffer_impl(std::move(buffer), path, fallback);
++#else
+ 			lexy::read_file_result file = lexy::read_file<lexy::default_encoding, lexy::encoding_endianness::bom>(path);
+ 
+ 			if (!file) {
+ 				return ovdl::detail::from_underlying<buffer_error>(ovdl::detail::to_underlying(file.error()));
+ 			}
+ 
+ 			return load_buffer_impl(std::move(file).buffer(), path, fallback);
++#endif
+ 		}
+ 
+ 		const char* path() const {

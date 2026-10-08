@@ -23,12 +23,13 @@
 
 ### Stage 1 WebAssembly port
 
-The first native build milestone is reproducible from pinned revisions and contains four isolated patches:
+The first native build milestone is reproducible from pinned revisions and contains five isolated patches:
 
 1. `patches/openvic/0001-emscripten-side-module.patch` — emits the OpenVic GDExtension as an Emscripten side module.
 2. `patches/openvic/0002-web-gdextension-library.patch` — declares only the validated release Web library in the GDExtension descriptor.
 3. `patches/openvic-scripts/0001-portable-libcpp-abi-namespace.patch` — removes a hard-coded libc++ ABI namespace assumption in generated memory code.
 4. `patches/openvic-simulation/0001-wasm32-size-t-hashing.patch` — makes size_t-dependent hashing defined on wasm32 while preserving the existing 64-bit path.
+5. `patches/openvic-dataloader/0001-emscripten-owned-file-buffer.patch` — after the Stage 4 real-data test reproduced an abort on the first interface parser input, keeps native `lexy::read_file` unchanged but uses an owned `fread` buffer on Emscripten to avoid the POSIX mmap path over browser MEMFS.
 
 The Stage 1 CI verifies the WASM magic bytes, Emscripten `dylink.0` section, exported `openvic_library_init` symbol, and exact Web descriptor entry.
 
@@ -84,6 +85,7 @@ V2 does not contain:
 
 - OpenVic: `d3361890c62ede9464eb41af7f797e87dedf4b28`
 - OpenVic-Simulation: `b7f5feb25b4bc83307489afd5e5d76e50a4915cc`
+- OpenVic-Dataloader: `b40b95636eb39cc0a55e9a0ef7575be90c21858e`
 - OpenVic scripts: `8f83cabf147de7d8a511b4aaefd137777c4eb9c8`
 - Godot API target: 4.7
 - Emscripten: 4.0.20

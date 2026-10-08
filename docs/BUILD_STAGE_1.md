@@ -12,6 +12,7 @@ It does **not** start Godot, load Victoria II data, patch compatibility parsers,
 
 - OpenVic: `d3361890c62ede9464eb41af7f797e87dedf4b28`
 - OpenVic-Simulation: `b7f5feb25b4bc83307489afd5e5d76e50a4915cc`
+- OpenVic-Dataloader: `b40b95636eb39cc0a55e9a0ef7575be90c21858e`
 - OpenVic scripts: `8f83cabf147de7d8a511b4aaefd137777c4eb9c8`
 - Emscripten: `4.0.20`
 - target: `wasm32`

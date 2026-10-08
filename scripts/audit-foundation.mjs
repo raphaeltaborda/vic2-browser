@@ -30,6 +30,7 @@ const required = [
   'patches/openvic/0002-web-gdextension-library.patch',
   'patches/openvic-scripts/0001-portable-libcpp-abi-namespace.patch',
   'patches/openvic-simulation/0001-wasm32-size-t-hashing.patch',
+  'patches/openvic-dataloader/0001-emscripten-owned-file-buffer.patch',
   'scripts/apply-portability-patches.sh',
   'scripts/validate-stage1-wasm.mjs',
   'scripts/stage2-browser-smoke.mjs',
@@ -79,6 +80,7 @@ const expectedPatches = new Set([
   'patches/openvic/0002-web-gdextension-library.patch',
   'patches/openvic-scripts/0001-portable-libcpp-abi-namespace.patch',
   'patches/openvic-simulation/0001-wasm32-size-t-hashing.patch',
+  'patches/openvic-dataloader/0001-emscripten-owned-file-buffer.patch',
 ]);
 
 function walk(dir) {
@@ -125,9 +127,23 @@ for (const pin of [
   'd3361890c62ede9464eb41af7f797e87dedf4b28',
   '8f83cabf147de7d8a511b4aaefd137777c4eb9c8',
   'b7f5feb25b4bc83307489afd5e5d76e50a4915cc',
+  'b40b95636eb39cc0a55e9a0ef7575be90c21858e',
   '4.0.20',
 ]) {
   if (!stage1.includes(pin)) fail('Stage 1 workflow is missing pinned input: ' + pin);
+}
+
+const dataloaderPatch = read('patches/openvic-dataloader/0001-emscripten-owned-file-buffer.patch');
+for (const token of [
+  '#if defined(__EMSCRIPTEN__)',
+  'std::fread',
+  'lexy::buffer<lexy::default_encoding>',
+  'lexy::read_file<lexy::default_encoding',
+]) {
+  if (!dataloaderPatch.includes(token)) fail('Emscripten parser buffer patch is missing: ' + token);
+}
+if (!dataloaderPatch.includes('#else') || !dataloaderPatch.includes('#endif')) {
+  fail('Emscripten parser buffer patch must preserve the native read_file path');
 }
 
 const descriptorPatch = read('patches/openvic/0002-web-gdextension-library.patch');
