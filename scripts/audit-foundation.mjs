@@ -23,14 +23,21 @@ const required = [
   'THIRD_PARTY_NOTICES.md',
   'docs/FOUNDATION.md',
   'docs/BUILD_STAGE_1.md',
+  'docs/BUILD_STAGE_2.md',
   'patches/openvic/0001-emscripten-side-module.patch',
   'patches/openvic/0002-web-gdextension-library.patch',
   'patches/openvic-scripts/0001-portable-libcpp-abi-namespace.patch',
   'patches/openvic-simulation/0001-wasm32-size-t-hashing.patch',
   'scripts/apply-portability-patches.sh',
   'scripts/validate-stage1-wasm.mjs',
+  'scripts/stage2-browser-smoke.mjs',
   '.github/workflows/build-openvic-wasm.yml',
+  '.github/workflows/stage2-godot-smoke.yml',
   '.github/workflows/test-launcher.yml',
+  'stage2/project.godot',
+  'stage2/Main.tscn',
+  'stage2/Main.gd',
+  'stage2/export_presets.cfg',
   'tests/launcher.test.cjs',
   'tests/launcher.browser.cjs',
   'web/openvic-shell.html',
@@ -77,6 +84,7 @@ for (const rel of actualPatches) {
 
 for (const workflowPath of [
   '.github/workflows/build-openvic-wasm.yml',
+  '.github/workflows/stage2-godot-smoke.yml',
   '.github/workflows/test-launcher.yml',
 ]) {
   const workflow = read(workflowPath);
@@ -116,6 +124,46 @@ if (/web\.wasm32\.single\.debug/.test(descriptorPatch)) {
 const targetPatch = read('patches/openvic/0001-emscripten-side-module.patch');
 for (const token of ['-sSIDE_MODULE=1', '-pthread', 'Emscripten']) {
   if (!targetPatch.includes(token)) fail('OpenVic target patch is missing required token: ' + token);
+}
+
+const stage2Preset = read('stage2/export_presets.cfg');
+for (const invariant of [
+  'variant/extensions_support=true',
+  'variant/thread_support=true',
+]) {
+  if (!stage2Preset.includes(invariant)) fail('Stage 2 Web preset is missing: ' + invariant);
+}
+
+const stage2Main = read('stage2/Main.gd');
+for (const invariant of [
+  'GDExtensionManager.is_extension_loaded(EXTENSION_PATH)',
+  'Engine.has_singleton("OVGame")',
+  '[Stage2] OPENVIC_GDEXTENSION_READY',
+]) {
+  if (!stage2Main.includes(invariant)) fail('Stage 2 runtime proof is missing: ' + invariant);
+}
+if (stage2Main.includes('/vic2') || stage2Main.includes('--base-path')) {
+  fail('Stage 2 must remain independent from Victoria II data loading');
+}
+
+const stage2Smoke = read('scripts/stage2-browser-smoke.mjs');
+for (const invariant of [
+  'globalThis.crossOriginIsolated === true',
+  'sideModuleRequested=',
+  '[Stage2] OPENVIC_GDEXTENSION_READY',
+]) {
+  if (!stage2Smoke.includes(invariant)) fail('Stage 2 browser proof is missing: ' + invariant);
+}
+
+const stage2Workflow = read('.github/workflows/stage2-godot-smoke.yml');
+for (const invariant of [
+  'GODOT_VERSION: 4.7.2',
+  'cadd3204e728a35d3f13adb7fd0d7902636b79f6b95c40c265eb73b6c35329e4',
+  'f298490b8d44d934be425a5a65a51bf15f422428b229a06a6e11d9ffea248011',
+  'sha256sum -c WASM_SHA256',
+  'test "$(cat stage1-artifact/PORT_COMMIT)" = "${{ steps.stage1.outputs.head_sha }}"',
+]) {
+  if (!stage2Workflow.includes(invariant)) fail('Stage 2 workflow contract is missing: ' + invariant);
 }
 
 const launcher = read('web/openvic-shell.html');
