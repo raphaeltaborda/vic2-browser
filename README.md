@@ -25,6 +25,7 @@ The browser client requires the player to select their own legitimate Victoria I
 - Stage 1 artifact layout mirrors `res://bin/openvic/` and includes provenance, the exact patch series, self-verifying checksums and license/notices.
 - Stage 2 exports an official Godot 4.7.2 threaded Web project and proves in Chromium that the OpenVic side module is requested, initialized and registers `OVGame`.
 - Stage 3 proves the browser-to-native filesystem boundary: files mounted under `/vic2` in Emscripten MEMFS are accepted as OpenVic dataloader roots, resolved by native C++ and remain byte-readable.
+- Stage 4 provides a CI-validated manual harness for the real OpenVic Victoria II compatibility loader. Full success requires a user-supplied legitimate local installation and is not claimed by CI alone.
 
 ## Architecture target
 
@@ -46,7 +47,8 @@ There is no Wine, BoxedWine, x86 emulation, or execution of `v2game.exe` in the 
 [done] reproducible OpenVic wasm32 side module
 [done] minimal Godot Web export loads and initializes the validated GDExtension
 [done] /vic2 MEMFS → OpenVic Dataloader filesystem boundary
-[next] load all definitions
+[test] Stage 4 real compatibility loader harness
+       └─ CI harness validated; real Victoria II data test pending
        ↓
 main menu
        ↓
@@ -59,4 +61,4 @@ advance one game day
 
 No subsystem should be disabled merely to move startup forward. A Web incompatibility must be isolated at the API or platform assumption that causes it and fixed at that boundary.
 
-See `docs/FOUNDATION.md` for engineering rules, `docs/BUILD_STAGE_1.md` for the validated WASM build, `docs/BUILD_STAGE_2.md` for GDExtension initialization and `docs/BUILD_STAGE_3.md` for the validated filesystem boundary.
+See `docs/FOUNDATION.md` for engineering rules, `docs/BUILD_STAGE_1.md` for the validated WASM build, `docs/BUILD_STAGE_2.md` for GDExtension initialization and `docs/BUILD_STAGE_3.md` for the validated filesystem boundary and `docs/BUILD_STAGE_4.md` for the real-data loader harness.
