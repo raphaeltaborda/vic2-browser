@@ -1,5 +1,4 @@
 diff --git a/src/openvic-dataloader/detail/ParseHandler.hpp b/src/openvic-dataloader/detail/ParseHandler.hpp
-index 213a63a..9770f93 100644
 --- a/src/openvic-dataloader/detail/ParseHandler.hpp
 +++ b/src/openvic-dataloader/detail/ParseHandler.hpp
 @@ -1,6 +1,8 @@
@@ -11,7 +10,7 @@ index 213a63a..9770f93 100644
  #include <optional>
  #include <string>
  #include <utility>
-@@ -44,12 +46,48 @@ namespace ovdl::detail {
+@@ -59,6 +61,46 @@
  		}
  
  		buffer_error load_file(const char* path, std::optional<Encoding> fallback) {
@@ -58,7 +57,7 @@ index 213a63a..9770f93 100644
  			lexy::read_file_result file = lexy::read_file<lexy::default_encoding, lexy::encoding_endianness::bom>(path);
  
  			if (!file) {
- 				return ovdl::detail::from_underlying<buffer_error>(ovdl::detail::to_underlying(file.error()));
+@@ -66,6 +108,7 @@
  			}
  
  			return load_buffer_impl(std::move(file).buffer(), path, fallback);
