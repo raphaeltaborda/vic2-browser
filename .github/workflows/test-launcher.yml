@@ -5,14 +5,28 @@ on:
     paths:
       - 'web/**'
       - 'tests/**'
-      - '.github/workflows/test-launcher.yml'
+      - 'scripts/audit-foundation.mjs'
+      - 'patches/**'
+      - 'docs/**'
+      - 'README.md'
+      - 'THIRD_PARTY_NOTICES.md'
+      - '.editorconfig'
+      - '.gitattributes'
+      - '.github/workflows/*.yml'
   push:
     branches:
       - web-port-v2
     paths:
       - 'web/**'
       - 'tests/**'
-      - '.github/workflows/test-launcher.yml'
+      - 'scripts/audit-foundation.mjs'
+      - 'patches/**'
+      - 'docs/**'
+      - 'README.md'
+      - 'THIRD_PARTY_NOTICES.md'
+      - '.editorconfig'
+      - '.gitattributes'
+      - '.github/workflows/*.yml'
 
 permissions:
   contents: read
@@ -29,8 +43,12 @@ jobs:
         with:
           node-version: '22'
 
-      - name: Check test syntax
-        run: node --check tests/launcher.test.cjs && node --check tests/launcher.browser.cjs
+      - name: Check repository and test syntax
+        run: |
+          node --check scripts/audit-foundation.mjs
+          node --check tests/launcher.test.cjs
+          node --check tests/launcher.browser.cjs
+          node scripts/audit-foundation.mjs
 
       - name: Test launcher behavior
         run: node --test tests/launcher.test.cjs
