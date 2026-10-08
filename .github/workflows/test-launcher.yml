@@ -4,6 +4,9 @@ on:
   pull_request:
     paths:
       - 'web/**'
+      - 'stage2/**'
+      - 'stage3/**'
+      - 'stage4/**'
       - 'tests/**'
       - 'scripts/audit-foundation.mjs'
       - 'patches/**'
@@ -18,6 +21,9 @@ on:
       - main
     paths:
       - 'web/**'
+      - 'stage2/**'
+      - 'stage3/**'
+      - 'stage4/**'
       - 'tests/**'
       - 'scripts/audit-foundation.mjs'
       - 'patches/**'

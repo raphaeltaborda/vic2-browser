@@ -1,0 +1,18 @@
+; Stage 4: run OpenVic's real Victoria II compatibility loader against user-supplied local data.
+config_version=5
+
+[application]
+
+config/name="OpenVic Stage 4 Definition Loader"
+run/main_scene="res://Main.tscn"
+
+[display]
+
+window/size/viewport_width=960
+window/size/viewport_height=540
+window/stretch/mode="canvas_items"
+
+[rendering]
+
+renderer/rendering_method="gl_compatibility"
+renderer/rendering_method.mobile="gl_compatibility"

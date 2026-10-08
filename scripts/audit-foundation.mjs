@@ -25,6 +25,7 @@ const required = [
   'docs/BUILD_STAGE_1.md',
   'docs/BUILD_STAGE_2.md',
   'docs/BUILD_STAGE_3.md',
+  'docs/BUILD_STAGE_4.md',
   'patches/openvic/0001-emscripten-side-module.patch',
   'patches/openvic/0002-web-gdextension-library.patch',
   'patches/openvic-scripts/0001-portable-libcpp-abi-namespace.patch',
@@ -33,9 +34,11 @@ const required = [
   'scripts/validate-stage1-wasm.mjs',
   'scripts/stage2-browser-smoke.mjs',
   'scripts/stage3-browser-smoke.mjs',
+  'scripts/stage4-browser-smoke.mjs',
   '.github/workflows/build-openvic-wasm.yml',
   '.github/workflows/stage2-godot-smoke.yml',
   '.github/workflows/stage3-filesystem-smoke.yml',
+  '.github/workflows/stage4-definition-loader.yml',
   '.github/workflows/test-launcher.yml',
   'stage2/project.godot',
   'stage2/Main.tscn',
@@ -46,6 +49,13 @@ const required = [
   'stage3/Main.gd',
   'stage3/export_presets.cfg',
   'stage3/stage3-shell.html',
+  'stage4/project.godot',
+  'stage4/Main.tscn',
+  'stage4/Main.gd',
+  'stage4/export_presets.cfg',
+  'stage4/stage4-shell.html',
+  'stage4/serve-local.py',
+  'stage4/run-stage4.bat',
   'tests/launcher.test.cjs',
   'tests/launcher.browser.cjs',
   'web/openvic-shell.html',
@@ -94,6 +104,7 @@ for (const workflowPath of [
   '.github/workflows/build-openvic-wasm.yml',
   '.github/workflows/stage2-godot-smoke.yml',
   '.github/workflows/stage3-filesystem-smoke.yml',
+  '.github/workflows/stage4-definition-loader.yml',
   '.github/workflows/test-launcher.yml',
 ]) {
   const workflow = read(workflowPath);
@@ -212,6 +223,44 @@ for (const invariant of [
   'html/custom_html_shell="res://stage3-shell.html"',
 ]) {
   if (!stage3Preset.includes(invariant)) fail('Stage 3 Web preset is missing: ' + invariant);
+}
+
+const stage4Main = read('stage4/Main.gd');
+for (const invariant of [
+  'set_compatibility_mode_roots',
+  'lookup_file_path',
+  'load_defines_compatibility_mode',
+  '[Stage4] LOAD_BEGIN',
+  '[Stage4] LOAD_RETURN',
+  '[Stage4] OPENVIC_DEFINITIONS_READY',
+]) {
+  if (!stage4Main.includes(invariant)) fail('Stage 4 loader contract is missing: ' + invariant);
+}
+
+const stage4Shell = read('stage4/stage4-shell.html');
+for (const invariant of [
+  'webkitdirectory',
+  '/vic2/',
+  'shouldMount(path)',
+  'v2game.exe',
+  'common/defines.lua',
+  'engine.copyToFS',
+  '__OPENVIC_STAGE4_WAITING__',
+]) {
+  if (!stage4Shell.includes(invariant)) fail('Stage 4 browser harness invariant is missing: ' + invariant);
+}
+if (!stage4Shell.includes('/\\.(exe|dll|msi|zip|rar|7z|log|dmp)$/')) {
+  fail('Stage 4 must preserve the production executable/archive exclusion policy');
+}
+
+const stage4Workflow = read('.github/workflows/stage4-definition-loader.yml');
+for (const invariant of [
+  'branch=main',
+  'sha256sum -c WASM_SHA256',
+  'GODOT_VERSION: 4.7.2',
+  'openvic-stage4-definition-loader',
+]) {
+  if (!stage4Workflow.includes(invariant)) fail('Stage 4 workflow contract is missing: ' + invariant);
 }
 
 const launcher = read('web/openvic-shell.html');

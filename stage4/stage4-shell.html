@@ -1,0 +1,297 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width,initial-scale=1">
+	<title>$GODOT_PROJECT_NAME</title>
+	<style>
+		:root { color-scheme: dark; font-family: Inter, system-ui, sans-serif; }
+		* { box-sizing: border-box; }
+		body { margin: 0; min-height: 100vh; background: #111318; color: #edf1f7; display: grid; place-items: center; }
+		main { width: min(900px, calc(100vw - 32px)); padding: 28px; background: #1a1d24; border: 1px solid #303641; border-radius: 14px; }
+		h1 { margin: 0 0 8px; font-size: 28px; }
+		p { color: #b6bfcc; line-height: 1.5; }
+		.actions { display: flex; gap: 12px; flex-wrap: wrap; margin: 18px 0; }
+		button { border: 0; border-radius: 9px; padding: 11px 16px; font-weight: 700; cursor: pointer; }
+		button:disabled { opacity: .45; cursor: not-allowed; }
+		.primary { background: #e5e9f0; color: #111318; }
+		.secondary { background: #2a303b; color: #edf1f7; }
+		#checks, #status { margin-top: 14px; }
+		.row { display: flex; justify-content: space-between; gap: 16px; padding: 7px 0; border-bottom: 1px solid #292f39; }
+		.ok { color: #8bd49c; }
+		.bad { color: #ff9d9d; }
+		.pending { color: #e6c783; }
+		progress { width: 100%; height: 16px; }
+		pre { max-height: 300px; overflow: auto; white-space: pre-wrap; background: #0d0f13; padding: 12px; border-radius: 8px; font-size: 12px; }
+		#canvas { display: none; width: 1px; height: 1px; }
+		.small { font-size: 13px; }
+	</style>
+	$GODOT_HEAD_INCLUDE
+</head>
+<body>
+	<main>
+		<h1>Stage 4 · OpenVic definition loader</h1>
+		<p>Selecione uma instalação legítima de Victoria II. Os arquivos permanecem nesta sessão do navegador e são montados localmente em <code>/vic2</code>.</p>
+		<div class="row"><span>Godot Web</span><strong id="engine-state" class="pending">inicializando…</strong></div>
+		<div class="row"><span>OpenVic Stage 4</span><strong id="stage-state" class="pending">aguardando arquivos</strong></div>
+
+		<div class="actions">
+			<button id="pick" class="secondary" disabled>Selecionar pasta Victoria II</button>
+			<input id="files" type="file" webkitdirectory multiple hidden disabled>
+			<button id="run" class="primary" disabled>Executar loader real</button>
+		</div>
+
+		<div id="checks"></div>
+		<div id="progress-wrap" hidden>
+			<progress id="progress" max="100" value="0"></progress>
+			<p id="status" class="small">Preparando…</p>
+		</div>
+
+		<details>
+			<summary>Diagnóstico</summary>
+			<div class="actions"><button id="copy" class="secondary">Copiar log</button></div>
+			<pre id="log"></pre>
+		</details>
+		<canvas id="canvas"></canvas>
+	</main>
+
+	<script src="$GODOT_URL"></script>
+	<script>
+const GODOT_CONFIG = $GODOT_CONFIG;
+const GODOT_THREADS_ENABLED = $GODOT_THREADS_ENABLED;
+
+const filesInput = document.getElementById('files');
+const pick = document.getElementById('pick');
+const run = document.getElementById('run');
+const checks = document.getElementById('checks');
+const progressWrap = document.getElementById('progress-wrap');
+const progress = document.getElementById('progress');
+const status = document.getElementById('status');
+const engineState = document.getElementById('engine-state');
+const stageState = document.getElementById('stage-state');
+const logEl = document.getElementById('log');
+const canvas = document.getElementById('canvas');
+
+const logLines = [];
+let selected = [];
+let valid = false;
+let engineReady = false;
+let started = false;
+
+function log(line) {
+	const text = String(line);
+	console.log(text);
+	logLines.push(new Date().toISOString().slice(11, 19) + ' ' + text);
+	if (logLines.length > 1000) logLines.splice(0, logLines.length - 1000);
+	logEl.textContent = logLines.join('\n');
+	logEl.scrollTop = logEl.scrollHeight;
+
+	if (text.includes('[Stage4] LOAD_BEGIN')) {
+		stageState.textContent = 'carregando definições…';
+		stageState.className = 'pending';
+	}
+	if (text.includes('[Stage4] OPENVIC_DEFINITIONS_READY')) {
+		stageState.textContent = 'definições carregadas';
+		stageState.className = 'ok';
+	}
+	if (text.includes('[Stage4] OPENVIC_DEFINITIONS_FAILED')) {
+		stageState.textContent = 'falha no loader';
+		stageState.className = 'bad';
+	}
+}
+
+function relativePath(file) {
+	const raw = (file.webkitRelativePath || file.name).replaceAll('\\', '/');
+	const slash = raw.indexOf('/');
+	return slash >= 0 ? raw.slice(slash + 1) : raw;
+}
+
+function safeRelativePath(file) {
+	const rel = relativePath(file);
+	const parts = rel.split('/');
+	if (!rel || rel.startsWith('/') || rel.includes('\0') ||
+		parts.some(part => !part || part === '.' || part === '..')) {
+		throw new Error('A seleção contém caminho inválido.');
+	}
+	return rel;
+}
+
+function shouldMount(path) {
+	const lower = path.toLowerCase();
+	return !/\.(exe|dll|msi|zip|rar|7z|log|dmp)$/.test(lower) &&
+		!/^(mod|mods|save games|screenshots|logs|crashdumps|_commonredist|directx|dx|install)\//.test(lower) &&
+		!/^map\/cache\//.test(lower);
+}
+
+function buildMap() {
+	const map = new Map();
+	for (const file of selected) {
+		const rel = safeRelativePath(file);
+		const key = rel.toLowerCase();
+		if (map.has(key)) throw new Error('Há caminhos duplicados/conflitantes na seleção.');
+		map.set(key, file);
+	}
+	return map;
+}
+
+function row(label, ok) {
+	const div = document.createElement('div');
+	div.className = 'row';
+	const a = document.createElement('span');
+	a.textContent = label;
+	const b = document.createElement('strong');
+	b.textContent = ok ? 'OK' : 'ausente';
+	b.className = ok ? 'ok' : 'bad';
+	div.append(a, b);
+	checks.appendChild(div);
+}
+
+function validateSelection() {
+	checks.replaceChildren();
+	let map;
+	try {
+		map = buildMap();
+	} catch (error) {
+		valid = false;
+		run.disabled = true;
+		row('Estrutura da seleção', false);
+		log('[Stage4] selection error: ' + error.message);
+		return;
+	}
+
+	const required = [
+		'v2game.exe',
+		'common/defines.lua',
+		'map/definition.csv',
+		'map/provinces.bmp',
+		'interface/sound.sfx',
+		'interface/core.gui',
+	];
+
+	valid = selected.length > 0;
+	for (const path of required) {
+		const ok = map.has(path) && map.get(path).size > 0;
+		row(path, ok);
+		valid &&= ok;
+	}
+
+	const localisation = [...map.entries()].some(([p, f]) => p.startsWith('localisation/') && f.size > 0);
+	const history = [...map.entries()].some(([p, f]) => p.startsWith('history/') && f.size > 0);
+	row('localisation/', localisation);
+	row('history/', history);
+	valid &&= localisation && history;
+
+	run.disabled = !(engineReady && valid && !started);
+}
+
+async function mountVictoria(engine) {
+	const files = selected.filter(file => shouldMount(safeRelativePath(file)));
+	const total = files.reduce((sum, file) => sum + file.size, 0);
+	let done = 0;
+	let lastYield = performance.now();
+
+	progressWrap.hidden = false;
+	for (const file of files) {
+		const rel = safeRelativePath(file);
+		engine.copyToFS('/vic2/' + rel, await file.arrayBuffer());
+		done += file.size;
+		if (performance.now() - lastYield > 40 || done === total) {
+			progress.value = total ? Math.round(done * 100 / total) : 100;
+			status.textContent = 'Montando /vic2 · ' + progress.value + '% · ' +
+				Math.round(done / 1048576) + ' / ' + Math.round(total / 1048576) + ' MB';
+			await new Promise(requestAnimationFrame);
+			lastYield = performance.now();
+		}
+	}
+	globalThis.__OPENVIC_STAGE4_MOUNTED__ = true;
+	log('[Stage4] MEMFS_MOUNT_OK files=' + files.length);
+}
+
+const engine = new Engine(Object.assign({}, GODOT_CONFIG, {
+	canvas,
+	focusCanvas: false,
+	onPrint: (...args) => log(args.join(' ')),
+	onPrintError: (...args) => {
+		const line = '[Godot stderr] ' + args.join(' ');
+		console.error(line);
+		logLines.push(new Date().toISOString().slice(11, 19) + ' ' + line);
+		logEl.textContent = logLines.join('\n');
+	},
+}));
+
+async function initialize() {
+	const missing = Engine.getMissingFeatures({threads: GODOT_THREADS_ENABLED});
+	if (missing.length) throw new Error('Recursos Web ausentes: ' + missing.join(', '));
+	if (!globalThis.crossOriginIsolated) {
+		throw new Error('Stage 4 requer cross-origin isolation. Use o servidor local incluído no artifact.');
+	}
+	await engine.init(GODOT_CONFIG.executable);
+	engineReady = true;
+	engineState.textContent = 'pronto';
+	engineState.className = 'ok';
+	pick.disabled = false;
+	filesInput.disabled = false;
+	globalThis.__OPENVIC_STAGE4_WAITING__ = true;
+	log('[Stage4] HARNESS_READY');
+}
+
+pick.addEventListener('click', () => filesInput.click());
+filesInput.addEventListener('change', () => {
+	if (started) return;
+	selected = Array.from(filesInput.files || []);
+	validateSelection();
+});
+
+run.addEventListener('click', async () => {
+	if (started || !engineReady || !valid) return;
+	started = true;
+	run.disabled = true;
+	pick.disabled = true;
+	filesInput.disabled = true;
+	stageState.textContent = 'montando arquivos…';
+	stageState.className = 'pending';
+
+	try {
+		await mountVictoria(engine);
+		status.textContent = 'Arquivos montados. Iniciando OpenVic…';
+		stageState.textContent = 'iniciando OpenVic…';
+
+		await engine.startGame({canvas});
+		log('[Stage4] GODOT_STARTED');
+	} catch (error) {
+		globalThis.__OPENVIC_STAGE4_FAILURE__ = true;
+		globalThis.__OPENVIC_STAGE4_STATE__ = 'shell-failed';
+		stageState.textContent = 'falha de inicialização';
+		stageState.className = 'bad';
+		log('[Stage4] SHELL_FAILED ' + (error?.stack || error));
+	}
+});
+
+document.getElementById('copy').addEventListener('click', async () => {
+	const text = [
+		'OpenVic Stage 4',
+		'crossOriginIsolated=' + globalThis.crossOriginIsolated,
+		'state=' + (globalThis.__OPENVIC_STAGE4_STATE__ || 'waiting'),
+		...logLines,
+	].join('\n');
+	await navigator.clipboard.writeText(text);
+});
+
+window.addEventListener('error', event => {
+	globalThis.__OPENVIC_STAGE4_FAILURE__ = true;
+	log('[Stage4] WINDOW_ERROR ' + (event.error?.stack || event.message));
+});
+window.addEventListener('unhandledrejection', event => {
+	globalThis.__OPENVIC_STAGE4_FAILURE__ = true;
+	log('[Stage4] PROMISE_REJECTION ' + (event.reason?.stack || event.reason));
+});
+
+initialize().catch(error => {
+	engineState.textContent = 'falha';
+	engineState.className = 'bad';
+	globalThis.__OPENVIC_STAGE4_FAILURE__ = true;
+	log('[Stage4] INIT_FAILED ' + (error?.stack || error));
+});
+	</script>
+</body>
+</html>
