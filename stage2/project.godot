@@ -1,0 +1,18 @@
+; Minimal Stage 2 project: prove Godot Web can initialize the validated OpenVic GDExtension.
+config_version=5
+
+[application]
+
+config/name="OpenVic Stage 2 Smoke"
+run/main_scene="res://Main.tscn"
+
+[display]
+
+window/size/viewport_width=640
+window/size/viewport_height=360
+window/stretch/mode="canvas_items"
+
+[rendering]
+
+renderer/rendering_method="gl_compatibility"
+renderer/rendering_method.mobile="gl_compatibility"
