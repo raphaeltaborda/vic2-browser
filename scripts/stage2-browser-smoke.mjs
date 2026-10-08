@@ -56,11 +56,12 @@ const browser = await chromium.launch({
   args: ['--no-sandbox'],
 });
 
+const consoleLines = [];
+const pageErrors = [];
+const requested = [];
+
 try {
   const page = await browser.newPage();
-  const consoleLines = [];
-  const pageErrors = [];
-  const requested = [];
 
   page.on('console', msg => consoleLines.push(msg.text()));
   page.on('pageerror', err => pageErrors.push(err.stack || err.message));
@@ -95,9 +96,9 @@ try {
   if (pageErrors.length) throw new Error('browser page errors:\n' + pageErrors.join('\n\n'));
 } catch (error) {
   console.error('--- browser console ---');
-  for (const line of consoleLines ?? []) console.error(line);
+  for (const line of consoleLines) console.error(line);
   console.error('--- page errors ---');
-  for (const line of pageErrors ?? []) console.error(line);
+  for (const line of pageErrors) console.error(line);
   throw error;
 } finally {
   await browser.close();
