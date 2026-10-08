@@ -35,6 +35,7 @@ const required = [
   'scripts/stage2-browser-smoke.mjs',
   'scripts/stage3-browser-smoke.mjs',
   'scripts/stage4-browser-smoke.mjs',
+  'scripts/stage4-pages-smoke.mjs',
   '.github/workflows/build-openvic-wasm.yml',
   '.github/workflows/stage2-godot-smoke.yml',
   '.github/workflows/stage3-filesystem-smoke.yml',
@@ -268,6 +269,7 @@ for (const invariant of [
   'GODOT_VERSION: 4.7.2',
   'actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346',
   'actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9',
+  'scripts/stage4-pages-smoke.mjs',
 ]) {
   if (!stage4Workflow.includes(invariant)) fail('Stage 4 workflow contract is missing: ' + invariant);
 }
