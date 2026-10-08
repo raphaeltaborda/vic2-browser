@@ -1,14 +1,13 @@
-name: Test launcher
+name: Repository checks
 
 on:
   pull_request:
     paths:
-      - 'web/**'
       - 'stage2/**'
       - 'stage3/**'
       - 'stage4/**'
       - 'tests/**'
-      - 'scripts/audit-foundation.mjs'
+      - 'scripts/**'
       - 'patches/**'
       - 'docs/**'
       - 'README.md'
@@ -20,12 +19,11 @@ on:
     branches:
       - main
     paths:
-      - 'web/**'
       - 'stage2/**'
       - 'stage3/**'
       - 'stage4/**'
       - 'tests/**'
-      - 'scripts/audit-foundation.mjs'
+      - 'scripts/**'
       - 'patches/**'
       - 'docs/**'
       - 'README.md'
@@ -38,10 +36,9 @@ permissions:
   contents: read
 
 jobs:
-  launcher:
+  checks:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
-
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
@@ -49,29 +46,28 @@ jobs:
         with:
           node-version: '22'
 
-      - name: Check repository and test syntax
-        run: |
-          node --check scripts/audit-foundation.mjs
-          node --check tests/launcher.test.cjs
-          node --check tests/launcher.browser.cjs
-          node scripts/audit-foundation.mjs
-
-      - name: Test launcher behavior
-        run: node --test tests/launcher.test.cjs
-
-      - name: Check browser layout with a stub engine
+      - name: Check repository, JavaScript and shell syntax
         run: |
           set -euo pipefail
+          while IFS= read -r -d '' file; do node --check "$file"; done < <(find scripts tests -type f \( -name '*.mjs' -o -name '*.cjs' \) -print0)
+          while IFS= read -r -d '' file; do bash -n "$file"; done < <(find scripts -type f -name '*.sh' -print0)
+          node scripts/audit-foundation.mjs
+
+      - name: Test deployed Stage 4 shell behavior
+        run: node --test tests/stage4-shell.test.cjs
+
+      - name: Check Stage 4 browser layout with a stub engine
+        run: |
           npm install --no-save --package-lock=false --ignore-scripts --no-audit --no-fund playwright@1.58.2
           export CHROME="$(command -v google-chrome || command -v chromium)"
           test -n "$CHROME"
-          node tests/launcher.browser.cjs
+          node tests/stage4-shell.browser.cjs
 
-      - name: Upload launcher previews
+      - name: Upload Stage 4 previews
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: launcher-previews
+          name: stage4-previews
           path: build/screenshots
           if-no-files-found: ignore
           retention-days: 30

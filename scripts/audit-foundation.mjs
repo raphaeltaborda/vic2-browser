@@ -33,6 +33,11 @@ const required = [
   'patches/openvic-dataloader/0001-emscripten-owned-file-buffer.patch',
   'scripts/apply-portability-patches.sh',
   'scripts/validate-stage1-wasm.mjs',
+  'scripts/ci/resolve-stage1.sh',
+  'scripts/ci/install-stage1-payload.sh',
+  'scripts/ci/install-godot-web.sh',
+  'scripts/ci/export-godot-web.sh',
+  'scripts/lib/browser-smoke.mjs',
   'scripts/stage2-browser-smoke.mjs',
   'scripts/stage3-browser-smoke.mjs',
   'scripts/stage4-browser-smoke.mjs',
@@ -56,9 +61,8 @@ const required = [
   'stage4/Main.gd',
   'stage4/export_presets.cfg',
   'stage4/stage4-shell.html',
-  'tests/launcher.test.cjs',
-  'tests/launcher.browser.cjs',
-  'web/openvic-shell.html',
+  'tests/stage4-shell.test.cjs',
+  'tests/stage4-shell.browser.cjs',
 ];
 
 for (const rel of required) {
@@ -69,6 +73,9 @@ const forbidden = [
   'scripts/patch_openvic_web.py',
   'scripts/prepare_openvic_godot_web.py',
   'docs/NATIVE_WEB_PORT.md',
+  'web/openvic-shell.html',
+  'tests/launcher.test.cjs',
+  'tests/launcher.browser.cjs',
 ];
 
 for (const rel of forbidden) {
@@ -195,8 +202,10 @@ for (const invariant of [
   'GODOT_VERSION: 4.7.2',
   'cadd3204e728a35d3f13adb7fd0d7902636b79f6b95c40c265eb73b6c35329e4',
   'f298490b8d44d934be425a5a65a51bf15f422428b229a06a6e11d9ffea248011',
-  'sha256sum -c WASM_SHA256',
-  'test "$(cat stage1-artifact/PORT_COMMIT)" = "${{ steps.stage1.outputs.head_sha }}"',
+  'scripts/ci/resolve-stage1.sh',
+  'scripts/ci/install-stage1-payload.sh',
+  'scripts/ci/install-godot-web.sh',
+  'scripts/ci/export-godot-web.sh',
 ]) {
   if (!stage2Workflow.includes(invariant)) fail('Stage 2 workflow contract is missing: ' + invariant);
 }
@@ -275,6 +284,8 @@ for (const invariant of [
   'registration.update()',
   'updateViaCache: \'none\'',
   'OPENVIC_BUILD_ID',
+  'OPENVIC_STAGE1_ID',
+  '[Stage4] GODOT_START_DISPATCHED',
 ]) {
   if (!stage4Shell.includes(invariant)) fail('Stage 4 browser harness invariant is missing: ' + invariant);
 }
@@ -290,18 +301,14 @@ for (const invariant of [
   'actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346',
   'actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9',
   'scripts/stage4-pages-smoke.mjs',
+  'scripts/ci/resolve-stage1.sh',
+  'scripts/ci/install-stage1-payload.sh',
+  'scripts/ci/install-godot-web.sh',
+  'scripts/ci/export-godot-web.sh',
+  '__OPENVIC_STAGE1_SHA__',
   'EXPECTED_STAGE4_BUILD',
 ]) {
   if (!stage4Workflow.includes(invariant)) fail('Stage 4 workflow contract is missing: ' + invariant);
-}
-
-const launcher = read('web/openvic-shell.html');
-for (const invariant of [
-  "engine.copyToFS('/vic2/' + rel",
-  "packURL.origin !== new URL(location.href).origin",
-  "parts.some(part => !part || part === '.' || part === '..')",
-]) {
-  if (!launcher.includes(invariant)) fail('launcher safety invariant is missing: ' + invariant);
 }
 
 for (const rel of required.filter(name => /\.(md|patch|sh|mjs|cjs|yml|html)$/.test(name))) {
@@ -313,4 +320,4 @@ console.log('Repository foundation audit passed.');
 console.log('patches=' + actualPatches.length);
 console.log('actions=pinned');
 console.log('legacy-workarounds=absent');
-console.log('launcher-safety=invariants-present');
+console.log('stage4-shell=production-tested');

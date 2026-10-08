@@ -60,7 +60,9 @@
 const GODOT_CONFIG = $GODOT_CONFIG;
 const GODOT_THREADS_ENABLED = $GODOT_THREADS_ENABLED;
 const OPENVIC_BUILD_ID = '__OPENVIC_BUILD_SHA__';
+const OPENVIC_STAGE1_ID = '__OPENVIC_STAGE1_SHA__';
 globalThis.__OPENVIC_STAGE4_BUILD__ = OPENVIC_BUILD_ID;
+globalThis.__OPENVIC_STAGE1_BUILD__ = OPENVIC_STAGE1_ID;
 
 const filesInput = document.getElementById('files');
 const pick = document.getElementById('pick');
@@ -81,7 +83,7 @@ let engineReady = false;
 let started = false;
 
 function log(line) {
-	const text = String(line);
+	const text = String(line).slice(0, 4000);
 	console.log(text);
 	logLines.push(new Date().toISOString().slice(11, 19) + ' ' + text);
 	if (logLines.length > 1000) logLines.splice(0, logLines.length - 1000);
@@ -206,7 +208,8 @@ async function mountVictoria(engine) {
 		}
 	}
 	globalThis.__OPENVIC_STAGE4_MOUNTED__ = true;
-	log('[Stage4] MEMFS_MOUNT_OK files=' + files.length);
+	globalThis.__OPENVIC_STAGE4_MOUNT_STATS__ = {files: files.length, bytes: total};
+	log('[Stage4] MEMFS_MOUNT_OK files=' + files.length + ' bytes=' + total);
 }
 
 const engine = new Engine(Object.assign({}, GODOT_CONFIG, {
@@ -216,22 +219,24 @@ const engine = new Engine(Object.assign({}, GODOT_CONFIG, {
 	onPrintError: (...args) => {
 		const line = '[Godot stderr] ' + args.join(' ');
 		console.error(line);
-		logLines.push(new Date().toISOString().slice(11, 19) + ' ' + line);
-		logEl.textContent = logLines.join('\n');
+		log(line);
 	},
 }));
 
 async function waitForWorkerInstall(worker) {
 	if (!worker || worker.state === 'installed' || worker.state === 'activated' || worker.state === 'redundant') return;
-	await new Promise(resolve => {
-		const onState = () => {
-			if (worker.state === 'installed' || worker.state === 'activated' || worker.state === 'redundant') {
-				worker.removeEventListener('statechange', onState);
-				resolve();
-			}
-		};
-		worker.addEventListener('statechange', onState);
-	});
+	await Promise.race([
+		new Promise(resolve => {
+			const onState = () => {
+				if (worker.state === 'installed' || worker.state === 'activated' || worker.state === 'redundant') {
+					worker.removeEventListener('statechange', onState);
+					resolve();
+				}
+			};
+			worker.addEventListener('statechange', onState);
+		}),
+		new Promise((_, reject) => setTimeout(() => reject(new Error('Atualização do Service Worker não concluiu em 30s.')), 30000)),
+	]);
 }
 
 async function ensureIsolation() {
@@ -243,7 +248,7 @@ async function ensureIsolation() {
 	}
 
 	engineState.textContent = globalThis.crossOriginIsolated ? 'verificando build…' : 'ativando threads…';
-	log('[Stage4] build=' + OPENVIC_BUILD_ID);
+	log('[Stage4] build=' + OPENVIC_BUILD_ID + ' stage1=' + OPENVIC_STAGE1_ID);
 	log('[Stage4] Verificando Service Worker oficial do Godot: ' + GODOT_CONFIG.serviceWorker);
 
 	const registration = await navigator.serviceWorker.register(
@@ -307,6 +312,15 @@ filesInput.addEventListener('change', () => {
 	validateSelection();
 });
 
+function failShell(error) {
+	globalThis.__OPENVIC_STAGE4_FAILURE__ = true;
+	globalThis.__OPENVIC_STAGE4_STATE__ = 'shell-failed';
+	globalThis.__OPENVIC_STAGE4_DETAIL__ = String(error?.stack || error);
+	stageState.textContent = 'falha de inicialização';
+	stageState.className = 'bad';
+	log('[Stage4] SHELL_FAILED ' + globalThis.__OPENVIC_STAGE4_DETAIL__);
+}
+
 run.addEventListener('click', async () => {
 	if (started || !engineReady || !valid) return;
 	started = true;
@@ -315,31 +329,43 @@ run.addEventListener('click', async () => {
 	filesInput.disabled = true;
 	stageState.textContent = 'montando arquivos…';
 	stageState.className = 'pending';
+	globalThis.__OPENVIC_STAGE4_STATE__ = 'mounting';
 
 	try {
 		await mountVictoria(engine);
 		status.textContent = 'Arquivos montados. Iniciando OpenVic…';
 		stageState.textContent = 'iniciando OpenVic…';
+		globalThis.__OPENVIC_STAGE4_STATE__ = 'starting-engine';
 
-		await engine.startGame({canvas});
-		log('[Stage4] GODOT_STARTED');
+		const game = engine.startGame({canvas});
+		log('[Stage4] GODOT_START_DISPATCHED');
+		game.then(
+			() => log('[Stage4] GODOT_EXITED'),
+			error => failShell(error),
+		);
 	} catch (error) {
-		globalThis.__OPENVIC_STAGE4_FAILURE__ = true;
-		globalThis.__OPENVIC_STAGE4_STATE__ = 'shell-failed';
-		stageState.textContent = 'falha de inicialização';
-		stageState.className = 'bad';
-		log('[Stage4] SHELL_FAILED ' + (error?.stack || error));
+		failShell(error);
 	}
 });
 
 document.getElementById('copy').addEventListener('click', async () => {
+	const stats = globalThis.__OPENVIC_STAGE4_MOUNT_STATS__ || {};
 	const text = [
 		'OpenVic Stage 4',
+		'build=' + OPENVIC_BUILD_ID,
+		'stage1=' + OPENVIC_STAGE1_ID,
 		'crossOriginIsolated=' + globalThis.crossOriginIsolated,
 		'state=' + (globalThis.__OPENVIC_STAGE4_STATE__ || 'waiting'),
+		'detail=' + (globalThis.__OPENVIC_STAGE4_DETAIL__ || ''),
+		'mountedFiles=' + (stats.files ?? 0),
+		'mountedBytes=' + (stats.bytes ?? 0),
 		...logLines,
 	].join('\n');
-	await navigator.clipboard.writeText(text);
+	try {
+		await navigator.clipboard.writeText(text);
+	} catch {
+		log('[Stage4] CLIPBOARD_FAILED');
+	}
 });
 
 window.addEventListener('error', event => {
