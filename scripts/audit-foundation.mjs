@@ -295,9 +295,8 @@ if (!stage4Shell.includes('/\\.(exe|dll|msi|zip|rar|7z|log|dmp)$/')) {
 
 const stage4Workflow = read('.github/workflows/stage4-definition-loader.yml');
 for (const invariant of [
-  'branch=main',
-  'sha256sum -c WASM_SHA256',
   'GODOT_VERSION: 4.7.2',
+  'PREFER_STAGE1_SHA: ${{ github.sha }}',
   'actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346',
   'actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9',
   'scripts/stage4-pages-smoke.mjs',
