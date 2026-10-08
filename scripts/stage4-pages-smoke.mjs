@@ -2,6 +2,7 @@ import { chromium } from 'playwright';
 
 const url = process.env.STAGE4_PAGE_URL;
 const chrome = process.env.CHROME;
+const expectedBuild = process.env.EXPECTED_STAGE4_BUILD;
 
 if (!url) throw new Error('STAGE4_PAGE_URL is required');
 if (!chrome) throw new Error('CHROME is required');
@@ -37,6 +38,7 @@ try {
     serviceWorker: Boolean((await navigator.serviceWorker?.getRegistration())?.active),
     pageTitle: document.title,
     pickerEnabled: !document.getElementById('pick')?.disabled,
+    build: globalThis.__OPENVIC_STAGE4_BUILD__ || '',
   }));
 
   console.log('pageURL=' + page.url());
@@ -45,11 +47,15 @@ try {
   console.log('serviceWorkerActive=' + state.serviceWorker);
   console.log('waitingForGameData=' + state.waiting);
   console.log('pickerEnabled=' + state.pickerEnabled);
+  console.log('build=' + state.build);
 
   if (!state.isolated) throw new Error('deployed Pages site is not cross-origin isolated');
   if (!state.controlled || !state.serviceWorker) throw new Error('Godot Service Worker is not controlling the deployed page');
   if (!state.waiting || state.failed) throw new Error('deployed Stage 4 did not reach waiting-for-local-data state');
   if (!state.pickerEnabled) throw new Error('Victoria II folder picker is not enabled on deployed Pages site');
+  if (expectedBuild && state.build !== expectedBuild) {
+    throw new Error('deployed Pages build mismatch: expected ' + expectedBuild + ', got ' + state.build);
+  }
   if (pageErrors.length) throw new Error('public Pages errors:\n' + pageErrors.join('\n\n'));
 } catch (error) {
   console.error('--- public Pages console ---');

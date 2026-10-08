@@ -59,6 +59,8 @@
 	<script>
 const GODOT_CONFIG = $GODOT_CONFIG;
 const GODOT_THREADS_ENABLED = $GODOT_THREADS_ENABLED;
+const OPENVIC_BUILD_ID = '__OPENVIC_BUILD_SHA__';
+globalThis.__OPENVIC_STAGE4_BUILD__ = OPENVIC_BUILD_ID;
 
 const filesInput = document.getElementById('files');
 const pick = document.getElementById('pick');
@@ -219,28 +221,62 @@ const engine = new Engine(Object.assign({}, GODOT_CONFIG, {
 	},
 }));
 
+async function waitForWorkerInstall(worker) {
+	if (!worker || worker.state === 'installed' || worker.state === 'activated' || worker.state === 'redundant') return;
+	await new Promise(resolve => {
+		const onState = () => {
+			if (worker.state === 'installed' || worker.state === 'activated' || worker.state === 'redundant') {
+				worker.removeEventListener('statechange', onState);
+				resolve();
+			}
+		};
+		worker.addEventListener('statechange', onState);
+	});
+}
+
 async function ensureIsolation() {
-	if (!GODOT_THREADS_ENABLED || globalThis.crossOriginIsolated) {
-		sessionStorage.removeItem('openvic-stage4-isolation-attempts');
-		return true;
-	}
+	if (!GODOT_THREADS_ENABLED) return true;
 
 	if (!GODOT_CONFIG.serviceWorker || !('serviceWorker' in navigator)) {
+		if (globalThis.crossOriginIsolated) return true;
 		throw new Error('O navegador não conseguiu ativar o isolamento necessário para WebAssembly threaded.');
 	}
 
-	engineState.textContent = 'ativando threads…';
-	log('[Stage4] Registrando Service Worker oficial do Godot: ' + GODOT_CONFIG.serviceWorker);
+	engineState.textContent = globalThis.crossOriginIsolated ? 'verificando build…' : 'ativando threads…';
+	log('[Stage4] build=' + OPENVIC_BUILD_ID);
+	log('[Stage4] Verificando Service Worker oficial do Godot: ' + GODOT_CONFIG.serviceWorker);
 
-	await navigator.serviceWorker.register(GODOT_CONFIG.serviceWorker);
+	const registration = await navigator.serviceWorker.register(
+		GODOT_CONFIG.serviceWorker,
+		{ updateViaCache: 'none' }
+	);
+	await registration.update();
+	await waitForWorkerInstall(registration.installing);
+
+	if (registration.waiting) {
+		const updateKey = 'openvic-stage4-sw-update';
+		if (sessionStorage.getItem(updateKey) !== OPENVIC_BUILD_ID) {
+			sessionStorage.setItem(updateKey, OPENVIC_BUILD_ID);
+			log('[Stage4] Novo runtime encontrado; ativando build ' + OPENVIC_BUILD_ID);
+			registration.waiting.postMessage('update');
+			return false;
+		}
+	}
+
 	await Promise.race([
 		navigator.serviceWorker.ready,
 		new Promise((_, reject) => setTimeout(() => reject(new Error('Service Worker não ficou pronto em 30s.')), 30000)),
 	]);
 
+	if (globalThis.crossOriginIsolated) {
+		sessionStorage.removeItem('openvic-stage4-isolation-attempts');
+		sessionStorage.removeItem('openvic-stage4-sw-update');
+		return true;
+	}
+
 	const attempts = Number(sessionStorage.getItem('openvic-stage4-isolation-attempts') || '0');
 	if (attempts >= 2) {
-		throw new Error('O navegador não ativou crossOriginIsolated após registrar o Service Worker.');
+		throw new Error('O navegador não ativou crossOriginIsolated após atualizar o Service Worker.');
 	}
 
 	sessionStorage.setItem('openvic-stage4-isolation-attempts', String(attempts + 1));

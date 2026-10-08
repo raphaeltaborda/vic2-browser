@@ -6,7 +6,11 @@ on:
       - main
     paths:
       - 'stage4/**'
+      - 'patches/**'
+      - 'scripts/apply-portability-patches.sh'
       - 'scripts/stage4-browser-smoke.mjs'
+      - 'scripts/stage4-pages-smoke.mjs'
+      - '.github/workflows/build-openvic-wasm.yml'
       - 'docs/BUILD_STAGE_4.md'
       - '.github/workflows/stage4-definition-loader.yml'
   workflow_dispatch:
@@ -138,6 +142,9 @@ jobs:
           test -s build/stage4/index.wasm
           test -s build/stage4/index.pck
           grep -Fq 'Stage 4 · OpenVic definition loader' build/stage4/index.html
+          sed -i "s/__OPENVIC_BUILD_SHA__/$GITHUB_SHA/g" build/stage4/index.html
+          ! grep -Fq '__OPENVIC_BUILD_SHA__' build/stage4/index.html
+          grep -Fq "$GITHUB_SHA" build/stage4/index.html
 
           test -s build/stage4/index.service.worker.js
           find build/stage4 -maxdepth 3 -type f -print | sort
@@ -178,7 +185,8 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     env:
-      STAGE4_PAGE_URL: ${{ needs.deploy.outputs.page_url }}
+      STAGE4_PAGE_URL: ${{ needs.deploy.outputs.page_url }}?build=${{ github.sha }}
+      EXPECTED_STAGE4_BUILD: ${{ github.sha }}
 
     steps:
       - name: Checkout port repository

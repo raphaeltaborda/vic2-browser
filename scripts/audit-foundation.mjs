@@ -37,6 +37,7 @@ const required = [
   'scripts/stage3-browser-smoke.mjs',
   'scripts/stage4-browser-smoke.mjs',
   'scripts/stage4-pages-smoke.mjs',
+  'EXPECTED_STAGE4_BUILD',
   '.github/workflows/build-openvic-wasm.yml',
   '.github/workflows/stage2-godot-smoke.yml',
   '.github/workflows/stage3-filesystem-smoke.yml',
@@ -271,6 +272,10 @@ for (const invariant of [
   '__OPENVIC_STAGE4_WAITING__',
   'navigator.serviceWorker.register',
   'openvic-stage4-isolation-attempts',
+  'registration.waiting.postMessage(\'update\')',
+  'registration.update()',
+  'updateViaCache: \'none\'',
+  'OPENVIC_BUILD_ID',
 ]) {
   if (!stage4Shell.includes(invariant)) fail('Stage 4 browser harness invariant is missing: ' + invariant);
 }
