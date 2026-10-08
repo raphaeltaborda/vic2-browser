@@ -48,7 +48,7 @@ const required = [
   '.github/workflows/stage2-godot-smoke.yml',
   '.github/workflows/stage3-filesystem-smoke.yml',
   '.github/workflows/stage4-definition-loader.yml',
-  '.github/workflows/test-launcher.yml',
+  '.github/workflows/repository-checks.yml',
   'stage2/project.godot',
   'stage2/Main.tscn',
   'stage2/Main.gd',
@@ -146,7 +146,7 @@ for (const workflowPath of [
   '.github/workflows/stage2-godot-smoke.yml',
   '.github/workflows/stage3-filesystem-smoke.yml',
   '.github/workflows/stage4-definition-loader.yml',
-  '.github/workflows/test-launcher.yml',
+  '.github/workflows/repository-checks.yml',
 ]) {
   const workflow = read(workflowPath);
   for (const line of workflow.split(/\r?\n/)) {
