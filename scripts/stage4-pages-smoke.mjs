@@ -1,29 +1,10 @@
-import { chromium } from 'playwright';
+import {assertNoPageErrors, runBrowserSmoke} from './lib/browser-smoke.mjs';
 
 const url = process.env.STAGE4_PAGE_URL;
-const chrome = process.env.CHROME;
 const expectedBuild = process.env.EXPECTED_STAGE4_BUILD;
-
 if (!url) throw new Error('STAGE4_PAGE_URL is required');
-if (!chrome) throw new Error('CHROME is required');
 
-const browser = await chromium.launch({
-  executablePath: chrome,
-  headless: true,
-  args: ['--no-sandbox'],
-});
-
-const consoleLines = [];
-const pageErrors = [];
-
-try {
-  const page = await browser.newPage();
-
-  page.on('console', message => consoleLines.push(message.text()));
-  page.on('pageerror', error => pageErrors.push(error.stack || error.message));
-
-  await page.goto(url, {waitUntil: 'domcontentloaded', timeout: 30000});
-
+await runBrowserSmoke({url, timeout: 30000}, async ({page, pageErrors}) => {
   await page.waitForFunction(
     () => globalThis.__OPENVIC_STAGE4_WAITING__ === true || globalThis.__OPENVIC_STAGE4_FAILURE__ === true,
     null,
@@ -36,7 +17,6 @@ try {
     isolated: globalThis.crossOriginIsolated === true,
     controlled: navigator.serviceWorker?.controller != null,
     serviceWorker: Boolean((await navigator.serviceWorker?.getRegistration())?.active),
-    pageTitle: document.title,
     pickerEnabled: !document.getElementById('pick')?.disabled,
     build: globalThis.__OPENVIC_STAGE4_BUILD__ || '',
   }));
@@ -56,13 +36,5 @@ try {
   if (expectedBuild && state.build !== expectedBuild) {
     throw new Error('deployed Pages build mismatch: expected ' + expectedBuild + ', got ' + state.build);
   }
-  if (pageErrors.length) throw new Error('public Pages errors:\n' + pageErrors.join('\n\n'));
-} catch (error) {
-  console.error('--- public Pages console ---');
-  for (const line of consoleLines) console.error(line);
-  console.error('--- public Pages errors ---');
-  for (const line of pageErrors) console.error(line);
-  throw error;
-} finally {
-  await browser.close();
-}
+  assertNoPageErrors(pageErrors);
+});
