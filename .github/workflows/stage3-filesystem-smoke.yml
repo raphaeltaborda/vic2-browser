@@ -1,0 +1,156 @@
+name: Stage 3 OpenVic filesystem smoke
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'stage3/**'
+      - 'scripts/stage3-browser-smoke.mjs'
+      - 'docs/BUILD_STAGE_3.md'
+      - '.github/workflows/stage3-filesystem-smoke.yml'
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: read
+
+concurrency:
+  group: stage3-filesystem-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  GODOT_VERSION: 4.7.2
+  GODOT_TAG: 4.7.2-stable
+  GODOT_LINUX_SHA256: cadd3204e728a35d3f13adb7fd0d7902636b79f6b95c40c265eb73b6c35329e4
+  GODOT_TEMPLATES_SHA256: f298490b8d44d934be425a5a65a51bf15f422428b229a06a6e11d9ffea248011
+
+jobs:
+  filesystem:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout port repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Set up Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '22'
+
+      - name: Resolve newest Stage 1 run
+        id: stage1
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          api() {
+            curl --fail --silent --show-error --location \
+              -H "Accept: application/vnd.github+json" \
+              -H "Authorization: Bearer $GH_TOKEN" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "$1"
+          }
+
+          response="$(api "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/actions/workflows/build-openvic-wasm.yml/runs?branch=main&per_page=20")"
+          run_id="$(jq -r '.workflow_runs[0].id // empty' <<<"$response")"
+          stage1_sha="$(jq -r '.workflow_runs[0].head_sha // empty' <<<"$response")"
+          test -n "$run_id"
+          test -n "$stage1_sha"
+
+          status=""
+          conclusion=""
+          for _ in $(seq 1 120); do
+            current="$(api "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/actions/runs/$run_id")"
+            status="$(jq -r '.status' <<<"$current")"
+            conclusion="$(jq -r '.conclusion // ""' <<<"$current")"
+            echo "Stage 1 run $run_id ($stage1_sha): status=$status conclusion=${conclusion:-pending}"
+            [[ "$status" == "completed" ]] && break
+            sleep 15
+          done
+
+          [[ "$status" == "completed" ]]
+          [[ "$conclusion" == "success" ]]
+          echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
+          echo "head_sha=$stage1_sha" >> "$GITHUB_OUTPUT"
+
+      - name: Download validated Stage 1 artifact
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: openvic-wasm-stage1
+          path: stage1-artifact
+          github-token: ${{ github.token }}
+          run-id: ${{ steps.stage1.outputs.run_id }}
+
+      - name: Verify and install Stage 1 payload
+        run: |
+          set -euo pipefail
+          (
+            cd stage1-artifact
+            sha256sum -c WASM_SHA256
+            sha256sum -c GDEXTENSION_SHA256
+            sha256sum -c PATCHES_SHA256
+          )
+          test "$(cat stage1-artifact/PORT_COMMIT)" = "${{ steps.stage1.outputs.head_sha }}"
+
+          mkdir -p stage3/bin/openvic
+          cp stage1-artifact/bin/openvic/openvic.gdextension stage3/bin/openvic/
+          cp stage1-artifact/bin/openvic/libopenvic.web.template_release.wasm32.threads.wasm stage3/bin/openvic/
+
+      - name: Install verified Godot 4.7.2 editor and Web templates
+        run: |
+          set -euo pipefail
+          mkdir -p build/godot build/godot-templates
+
+          editor_zip="build/Godot_v${GODOT_TAG}_linux.x86_64.zip"
+          templates_tpz="build/Godot_v${GODOT_TAG}_export_templates.tpz"
+
+          curl --fail --location --retry 3 -o "$editor_zip" \
+            "https://github.com/godotengine/godot/releases/download/${GODOT_TAG}/Godot_v${GODOT_TAG}_linux.x86_64.zip"
+          echo "${GODOT_LINUX_SHA256}  $editor_zip" | sha256sum -c -
+
+          curl --fail --location --retry 3 -o "$templates_tpz" \
+            "https://github.com/godotengine/godot/releases/download/${GODOT_TAG}/Godot_v${GODOT_TAG}_export_templates.tpz"
+          echo "${GODOT_TEMPLATES_SHA256}  $templates_tpz" | sha256sum -c -
+
+          unzip -q "$editor_zip" -d build/godot
+          GODOT="$(find build/godot -maxdepth 1 -type f -name 'Godot_v*-stable_linux.x86_64' -print -quit)"
+          test -n "$GODOT"
+          chmod +x "$GODOT"
+          echo "GODOT=$GITHUB_WORKSPACE/$GODOT" >> "$GITHUB_ENV"
+
+          unzip -q "$templates_tpz" 'templates/web*' -d build/godot-templates
+          template_dir="$HOME/.local/share/godot/export_templates/${GODOT_VERSION}.stable"
+          mkdir -p "$template_dir"
+          cp -a build/godot-templates/templates/web* "$template_dir/"
+          "$GODOT" --version
+
+      - name: Import and export Stage 3 Web project
+        run: |
+          set -euo pipefail
+          "$GODOT" --headless --editor --path stage3 --quit-after 2
+          mkdir -p build/stage3
+          "$GODOT" --headless --path stage3 --export-release Web "$GITHUB_WORKSPACE/build/stage3/index.html"
+
+          test -s build/stage3/index.html
+          test -s build/stage3/index.wasm
+          test -s build/stage3/index.pck
+          grep -Fq 'STAGE3_DEFINES_SENTINEL' build/stage3/index.html
+          find build/stage3 -maxdepth 3 -type f -print | sort
+
+      - name: Browser filesystem smoke test
+        run: |
+          set -euo pipefail
+          npm install --no-save --package-lock=false --ignore-scripts --no-audit --no-fund playwright@1.58.2
+          export CHROME="$(command -v google-chrome || command -v chromium)"
+          test -n "$CHROME"
+          node scripts/stage3-browser-smoke.mjs build/stage3
+
+      - name: Upload Stage 3 Web smoke artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: openvic-stage3-filesystem-smoke
+          path: build/stage3
+          if-no-files-found: error
+          retention-days: 30

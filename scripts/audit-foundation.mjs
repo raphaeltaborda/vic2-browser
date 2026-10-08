@@ -24,6 +24,7 @@ const required = [
   'docs/FOUNDATION.md',
   'docs/BUILD_STAGE_1.md',
   'docs/BUILD_STAGE_2.md',
+  'docs/BUILD_STAGE_3.md',
   'patches/openvic/0001-emscripten-side-module.patch',
   'patches/openvic/0002-web-gdextension-library.patch',
   'patches/openvic-scripts/0001-portable-libcpp-abi-namespace.patch',
@@ -31,13 +32,20 @@ const required = [
   'scripts/apply-portability-patches.sh',
   'scripts/validate-stage1-wasm.mjs',
   'scripts/stage2-browser-smoke.mjs',
+  'scripts/stage3-browser-smoke.mjs',
   '.github/workflows/build-openvic-wasm.yml',
   '.github/workflows/stage2-godot-smoke.yml',
+  '.github/workflows/stage3-filesystem-smoke.yml',
   '.github/workflows/test-launcher.yml',
   'stage2/project.godot',
   'stage2/Main.tscn',
   'stage2/Main.gd',
   'stage2/export_presets.cfg',
+  'stage3/project.godot',
+  'stage3/Main.tscn',
+  'stage3/Main.gd',
+  'stage3/export_presets.cfg',
+  'stage3/stage3-shell.html',
   'tests/launcher.test.cjs',
   'tests/launcher.browser.cjs',
   'web/openvic-shell.html',
@@ -85,6 +93,7 @@ for (const rel of actualPatches) {
 for (const workflowPath of [
   '.github/workflows/build-openvic-wasm.yml',
   '.github/workflows/stage2-godot-smoke.yml',
+  '.github/workflows/stage3-filesystem-smoke.yml',
   '.github/workflows/test-launcher.yml',
 ]) {
   const workflow = read(workflowPath);
@@ -164,6 +173,40 @@ for (const invariant of [
   'test "$(cat stage1-artifact/PORT_COMMIT)" = "${{ steps.stage1.outputs.head_sha }}"',
 ]) {
   if (!stage2Workflow.includes(invariant)) fail('Stage 2 workflow contract is missing: ' + invariant);
+}
+
+const stage3Main = read('stage3/Main.gd');
+for (const invariant of [
+  'set_compatibility_mode_roots(ROOT)',
+  'lookup_file_path(relative_path)',
+  '[Stage3] OPENVIC_FILESYSTEM_READY',
+  '[Stage3] NEGATIVE_LOOKUP_OK',
+]) {
+  if (!stage3Main.includes(invariant)) fail('Stage 3 OpenVic filesystem proof is missing: ' + invariant);
+}
+if (stage3Main.includes('load_defines_compatibility_mode') || stage3Main.includes('load_definitions')) {
+  fail('Stage 3 must not invoke the definition loader');
+}
+
+const stage3Shell = read('stage3/stage3-shell.html');
+for (const invariant of [
+  '/vic2/v2game.exe',
+  '/vic2/common/defines.lua',
+  '/vic2/map/definition.csv',
+  'engine.copyToFS(path, bytes)',
+  'STAGE3_DEFINES_SENTINEL',
+  'STAGE3_MAP_SENTINEL',
+]) {
+  if (!stage3Shell.includes(invariant)) fail('Stage 3 MEMFS fixture invariant is missing: ' + invariant);
+}
+
+const stage3Preset = read('stage3/export_presets.cfg');
+for (const invariant of [
+  'variant/extensions_support=true',
+  'variant/thread_support=true',
+  'html/custom_html_shell="res://stage3-shell.html"',
+]) {
+  if (!stage3Preset.includes(invariant)) fail('Stage 3 Web preset is missing: ' + invariant);
 }
 
 const launcher = read('web/openvic-shell.html');

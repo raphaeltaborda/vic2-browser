@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width,initial-scale=1">
+	<title>$GODOT_PROJECT_NAME</title>
+	$GODOT_HEAD_INCLUDE
+</head>
+<body>
+	<canvas id="canvas"></canvas>
+	<script src="$GODOT_URL"></script>
+	<script>
+const GODOT_CONFIG = $GODOT_CONFIG;
+const GODOT_THREADS_ENABLED = $GODOT_THREADS_ENABLED;
+const canvas = document.getElementById('canvas');
+
+const fixture = new Map([
+	['/vic2/v2game.exe', new Uint8Array([0x53, 0x54, 0x41, 0x47, 0x45, 0x33]).buffer],
+	['/vic2/common/defines.lua', new TextEncoder().encode('-- STAGE3_DEFINES_SENTINEL\nNDefines = {}\n').buffer],
+	['/vic2/map/definition.csv', new TextEncoder().encode('province;red;green;blue;name;x\n1;1;2;3;STAGE3_MAP_SENTINEL;x\n').buffer],
+]);
+
+const engine = new Engine(Object.assign({}, GODOT_CONFIG, {
+	canvas,
+	focusCanvas: false,
+	onPrint: (...args) => console.log(...args),
+	onPrintError: (...args) => console.error(...args),
+}));
+
+(async () => {
+	const missing = Engine.getMissingFeatures({threads: GODOT_THREADS_ENABLED});
+	if (missing.length) throw new Error('Missing browser features: ' + missing.join(', '));
+
+	await engine.init(GODOT_CONFIG.executable);
+	for (const [path, bytes] of fixture) {
+		engine.copyToFS(path, bytes);
+	}
+	globalThis.__OPENVIC_STAGE3_MOUNTED__ = true;
+	console.log('[Stage3] MEMFS_MOUNT_OK files=' + fixture.size);
+
+	await engine.startGame({canvas});
+})().catch(error => {
+	globalThis.__OPENVIC_STAGE3_FAILURE__ = true;
+	console.error('[Stage3] SHELL_FAILED', error);
+});
+	</script>
+</body>
+</html>
