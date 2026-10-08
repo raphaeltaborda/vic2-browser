@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This branch is the implementation base for the native Web port. The old `main` history remains useful as a forensic record of experiments, but V2 does not inherit an old workaround merely because it once moved startup farther.
+`main` is the implementation base for the native Web port. Pre-V2 commits remain available in repository history as a forensic record of experiments, but the current tree does not inherit an old workaround merely because it once moved startup farther.
 
 ## Accepted foundation
 
@@ -42,6 +42,17 @@ The second milestone uses the validated Stage 1 artifact without rebuilding Open
 4. OpenVic's scene initializer registers the `OVGame` singleton.
 
 Stage 2 intentionally contains no Victoria II data path or compatibility loading.
+
+### Stage 3 filesystem boundary
+
+The third milestone mounts an original synthetic fixture into Emscripten MEMFS at `/vic2` before Godot starts, then verifies through the native OpenVic `GameSingleton`/Dataloader boundary that:
+
+1. `/vic2` is accepted as the compatibility-mode root;
+2. two known files are resolved by OpenVic's C++ filesystem lookup;
+3. the resolved bytes match their fixture sentinels;
+4. a deliberately missing file remains unresolved.
+
+Stage 3 does not invoke the definition loader. Its purpose is to prove that the browser-mounted filesystem and OpenVic's `std::filesystem` view are coherent before parser work begins.
 
 ### Tests
 
