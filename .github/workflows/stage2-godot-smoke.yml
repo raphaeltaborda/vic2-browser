@@ -28,7 +28,7 @@ env:
 jobs:
   smoke:
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 60
 
     steps:
       - name: Checkout port repository
@@ -39,18 +39,43 @@ jobs:
         with:
           node-version: '22'
 
-      - name: Resolve latest successful Stage 1 run
+      - name: Resolve newest Stage 1 run
         id: stage1
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          response="$(curl --fail --silent --show-error --location             -H "Accept: application/vnd.github+json"             -H "Authorization: Bearer $GH_TOKEN"             -H "X-GitHub-Api-Version: 2022-11-28"             "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/actions/workflows/build-openvic-wasm.yml/runs?branch=web-port-v2&status=success&per_page=20")"
 
-          run_id="$(jq -r '[.workflow_runs[] | select(.conclusion == "success")][0].id // empty' <<<"$response")"
+          api() {
+            curl --fail --silent --show-error --location \
+              -H "Accept: application/vnd.github+json" \
+              -H "Authorization: Bearer $GH_TOKEN" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "$1"
+          }
+
+          response="$(api "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/actions/workflows/build-openvic-wasm.yml/runs?branch=web-port-v2&per_page=20")"
+          run_id="$(jq -r '.workflow_runs[0].id // empty' <<<"$response")"
+          stage1_sha="$(jq -r '.workflow_runs[0].head_sha // empty' <<<"$response")"
           test -n "$run_id"
+          test -n "$stage1_sha"
+
+          status=""
+          conclusion=""
+          for _ in $(seq 1 120); do
+            current="$(api "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/actions/runs/$run_id")"
+            status="$(jq -r '.status' <<<"$current")"
+            conclusion="$(jq -r '.conclusion // ""' <<<"$current")"
+            echo "Stage 1 run $run_id ($stage1_sha): status=$status conclusion=${conclusion:-pending}"
+            [[ "$status" == "completed" ]] && break
+            sleep 15
+          done
+
+          [[ "$status" == "completed" ]]
+          [[ "$conclusion" == "success" ]]
+
           echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
-          echo "Using Stage 1 run $run_id"
+          echo "head_sha=$stage1_sha" >> "$GITHUB_OUTPUT"
 
       - name: Download validated Stage 1 artifact
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
@@ -63,12 +88,15 @@ jobs:
       - name: Verify and install Stage 1 payload
         run: |
           set -euo pipefail
+
           (
             cd stage1-artifact
             sha256sum -c WASM_SHA256
             sha256sum -c GDEXTENSION_SHA256
             sha256sum -c PATCHES_SHA256
           )
+
+          test "$(cat stage1-artifact/PORT_COMMIT)" = "${{ steps.stage1.outputs.head_sha }}"
 
           mkdir -p stage2/bin/openvic
           cp stage1-artifact/bin/openvic/openvic.gdextension stage2/bin/openvic/
@@ -82,10 +110,14 @@ jobs:
           editor_zip="build/Godot_v${GODOT_TAG}_linux.x86_64.zip"
           templates_tpz="build/Godot_v${GODOT_TAG}_export_templates.tpz"
 
-          curl --fail --location --retry 3             -o "$editor_zip"             "https://github.com/godotengine/godot/releases/download/${GODOT_TAG}/Godot_v${GODOT_TAG}_linux.x86_64.zip"
+          curl --fail --location --retry 3 \
+            -o "$editor_zip" \
+            "https://github.com/godotengine/godot/releases/download/${GODOT_TAG}/Godot_v${GODOT_TAG}_linux.x86_64.zip"
           echo "${GODOT_LINUX_SHA256}  $editor_zip" | sha256sum -c -
 
-          curl --fail --location --retry 3             -o "$templates_tpz"             "https://github.com/godotengine/godot/releases/download/${GODOT_TAG}/Godot_v${GODOT_TAG}_export_templates.tpz"
+          curl --fail --location --retry 3 \
+            -o "$templates_tpz" \
+            "https://github.com/godotengine/godot/releases/download/${GODOT_TAG}/Godot_v${GODOT_TAG}_export_templates.tpz"
           echo "${GODOT_TEMPLATES_SHA256}  $templates_tpz" | sha256sum -c -
 
           unzip -q "$editor_zip" -d build/godot
@@ -112,7 +144,7 @@ jobs:
           test -s build/stage2/index.html
           test -s build/stage2/index.wasm
           test -s build/stage2/index.pck
-          find build/stage2 -maxdepth 2 -type f -print | sort
+          find build/stage2 -maxdepth 3 -type f -print | sort
 
       - name: Browser smoke test
         run: |
