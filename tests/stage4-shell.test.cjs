@@ -31,6 +31,7 @@ function setup({failStart = false} = {}) {
       this.open = false;
     }
     append(...items) { this.children.push(...items); }
+    appendChild(item) { this.children.push(item); return item; }
     replaceChildren() { this.children = []; }
     addEventListener(name, callback) { this.listeners[name] = callback; }
     removeEventListener(name) { delete this.listeners[name]; }
