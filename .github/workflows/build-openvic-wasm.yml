@@ -3,7 +3,7 @@ name: Build clean OpenVic WASM
 on:
   push:
     branches:
-      - web-port-v2
+      - main
     paths:
       - 'patches/openvic/**'
       - 'patches/openvic-scripts/**'

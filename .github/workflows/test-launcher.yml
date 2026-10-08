@@ -15,7 +15,7 @@ on:
       - '.github/workflows/*.yml'
   push:
     branches:
-      - web-port-v2
+      - main
     paths:
       - 'web/**'
       - 'tests/**'

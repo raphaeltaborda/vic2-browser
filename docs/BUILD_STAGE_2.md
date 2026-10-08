@@ -10,7 +10,7 @@ Victoria II data is intentionally absent. There is no `/vic2` mount, compatibili
 
 ## Inputs
 
-- the latest successful `openvic-wasm-stage1` artifact from `web-port-v2`;
+- the latest successful `openvic-wasm-stage1` artifact from `main`;
 - official Godot 4.7.2 Linux editor;
 - official Godot 4.7.2 export templates;
 - Chromium on the GitHub-hosted Ubuntu runner.

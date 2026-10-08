@@ -3,7 +3,7 @@ name: Stage 2 Godot Web smoke
 on:
   push:
     branches:
-      - web-port-v2
+      - main
     paths:
       - 'stage2/**'
       - 'scripts/stage2-browser-smoke.mjs'
@@ -54,7 +54,7 @@ jobs:
               "$1"
           }
 
-          response="$(api "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/actions/workflows/build-openvic-wasm.yml/runs?branch=web-port-v2&per_page=20")"
+          response="$(api "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/actions/workflows/build-openvic-wasm.yml/runs?branch=main&per_page=20")"
           run_id="$(jq -r '.workflow_runs[0].id // empty' <<<"$response")"
           stage1_sha="$(jq -r '.workflow_runs[0].head_sha // empty' <<<"$response")"
           test -n "$run_id"

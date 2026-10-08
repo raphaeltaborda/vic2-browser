@@ -2,7 +2,7 @@
 
 Experimental native browser port of a Victoria II-compatible engine using **OpenVic + Godot Web + WebAssembly**.
 
-The `web-port-v2` branch is the clean implementation base. Compatibility work is introduced only as isolated, reproducible patches with a demonstrated failure behind each change.
+The `main` branch is the clean implementation base. Compatibility work is introduced only as isolated, reproducible patches with a demonstrated failure behind each change.
 
 ## Non-negotiable design rule
 
