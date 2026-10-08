@@ -32,6 +32,17 @@ The first native build milestone is reproducible from pinned revisions and conta
 
 The Stage 1 CI verifies the WASM magic bytes, Emscripten `dylink.0` section, exported `openvic_library_init` symbol, and exact Web descriptor entry.
 
+### Stage 2 Godot Web integration
+
+The second milestone uses the validated Stage 1 artifact without rebuilding OpenVic. It installs checksum-verified official Godot 4.7.2 editor/export templates, exports a minimal threaded Web project and verifies in Chromium that:
+
+1. the page is cross-origin isolated;
+2. the OpenVic side-module WASM is requested;
+3. Godot reports the GDExtension as loaded;
+4. OpenVic's scene initializer registers the `OVGame` singleton.
+
+Stage 2 intentionally contains no Victoria II data path or compatibility loading.
+
 ### Tests
 
 Tests cover:
