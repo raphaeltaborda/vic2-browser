@@ -37,6 +37,7 @@ const required = [
   'scripts/ci/install-stage1-payload.sh',
   'scripts/ci/install-godot-web.sh',
   'scripts/ci/export-godot-web.sh',
+  'scripts/ci/package-stage1.sh',
   'scripts/lib/browser-smoke.mjs',
   'scripts/stage2-browser-smoke.mjs',
   'scripts/stage3-browser-smoke.mjs',

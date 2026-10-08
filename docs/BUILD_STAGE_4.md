@@ -8,7 +8,7 @@ It calls the existing public OpenVic API:
 
 `GameSingleton.load_defines_compatibility_mode(PackedStringArray())`
 
-No loader bypass, parser replacement or Stage-4-specific C++ patch is introduced before observing an actual failure.
+No loader bypass or parser replacement is introduced merely to advance startup. The first real-data run reproduced an Emscripten abort immediately after the interface `.gfx` enumeration. That failure was traced to OpenVic-Dataloader's POSIX `lexy::read_file`/mmap path over browser MEMFS and fixed narrowly with `patches/openvic-dataloader/0001-emscripten-owned-file-buffer.patch`; native builds retain the original path.
 
 ## Why CI cannot prove full success
 
@@ -41,7 +41,7 @@ The upstream compatibility method includes `GameManager::load_definitions()` and
 
 ## Diagnostics
 
-The harness records:
+The harness records the Stage 4 deploy SHA and the exact Stage 1 WASM SHA, then records:
 
 - `ENTRY`;
 - logger setup state;

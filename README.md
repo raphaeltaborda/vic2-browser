@@ -16,8 +16,9 @@ The browser client requires the player to select their own legitimate Victoria I
 - Local-only mounting into Emscripten MEMFS under `/vic2`.
 - Exclusion of executables, DLLs, archives, saves, mods and map cache from the vanilla mount.
 - Path-safety and duplicate-path validation before startup.
-- Godot/OpenVic launcher UI with bounded diagnostics.
-- Desktop/mobile browser smoke tests and behavioral unit tests.
+- One production launcher: the Stage 4 shell deployed to GitHub Pages, with bounded diagnostics and build/WASM provenance.
+- Desktop/mobile browser smoke tests and behavioral unit tests run against that deployed-shell source, not a parallel legacy launcher.
+- Shared CI helpers keep Stage 2–4 artifact verification, Godot installation, export and browser serving consistent.
 - Reproducible OpenVic wasm32 build from pinned revisions.
 - Separate patches for the Emscripten side-module target, Web GDExtension descriptor, libc++ ABI namespace portability, 32-bit hashing and the Stage 4-proven Emscripten parser file-buffer boundary.
 - Stage 1 artifact validation for WebAssembly magic, Emscripten `dylink.0`, the `openvic_library_init` entry symbol, and the exact Web library declaration in `openvic.gdextension`.
@@ -61,4 +62,4 @@ advance one game day
 
 No subsystem should be disabled merely to move startup forward. A Web incompatibility must be isolated at the API or platform assumption that causes it and fixed at that boundary.
 
-See `docs/FOUNDATION.md` for engineering rules, `docs/BUILD_STAGE_1.md` for the validated WASM build, `docs/BUILD_STAGE_2.md` for GDExtension initialization and `docs/BUILD_STAGE_3.md` for the validated filesystem boundary and `docs/BUILD_STAGE_4.md` for the real-data loader harness.
+See `docs/FOUNDATION.md` for engineering rules, `docs/BUILD_STAGE_1.md` for the validated WASM build, `docs/BUILD_STAGE_2.md` for GDExtension initialization, `docs/BUILD_STAGE_3.md` for the validated filesystem boundary, and `docs/BUILD_STAGE_4.md` for the real-data loader harness.

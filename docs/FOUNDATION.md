@@ -6,20 +6,21 @@
 
 ## Accepted foundation
 
-### Launcher
+### Production Web shell
 
-`web/openvic-shell.html` provides behavior independent from the C++ compatibility stack:
+`stage4/stage4-shell.html` is the single user-facing launcher and the exact shell deployed to GitHub Pages. It:
 
-- validates browser capabilities before enabling startup;
-- validates the expected Victoria II installation structure;
-- rejects unsafe or ambiguous relative paths before mounting;
-- mounts selected data locally to `/vic2`;
+- validates the expected Victoria II installation structure before startup;
+- rejects unsafe, duplicate and case-colliding relative paths;
+- mounts only permitted local files under `/vic2`;
 - never uploads selected Victoria II files;
-- filters executables, DLLs, archives, mods, saves and map cache;
-- locks installation input once startup begins;
-- bounds diagnostics to avoid unbounded DOM/log growth;
-- treats Godot stderr as diagnostic output rather than assuming every warning is fatal;
-- requires page reload after a partially failed Emscripten/Godot start.
+- excludes executables, DLLs, archives, mods, saves and map cache from MEMFS;
+- keeps diagnostics bounded and records both the Web deploy SHA and Stage 1 WASM provenance;
+- updates the official Godot Service Worker without HTTP cache reuse and verifies cross-origin isolation;
+- treats Godot stderr as diagnostic output while rejected JS/WASM startup promises are terminal;
+- allows a single start per page because a partially failed Emscripten instance is not safely reusable.
+
+The obsolete pre-Stage-4 launcher was removed so tests cannot pass against code that is not deployed.
 
 ### Stage 1 WebAssembly port
 
@@ -55,20 +56,24 @@ The third milestone mounts an original synthetic fixture into Emscripten MEMFS a
 
 Stage 3 does not invoke the definition loader. Its purpose is to prove that the browser-mounted filesystem and OpenVic's `std::filesystem` view are coherent before parser work begins.
 
+### Shared CI infrastructure
+
+Stages 2–4 use the same versioned CI helpers for Stage 1 artifact resolution/verification, Godot installation and Web export. Browser smoke tests share one local HTTP/COOP/COEP harness. This keeps artifact provenance and Web-runtime assumptions identical across milestones.
+
+Stage 1 packaging is also scripted: the repository audit owns the exact patch allowlist, while packaging automatically copies and hashes that audited patch set.
+
 ### Tests
 
-Tests cover:
+Tests exercise the deployed Stage 4 shell and cover:
 
 - incomplete installation rejection;
 - case-insensitive recognition of required Victoria II paths;
 - invalid and case-colliding path rejection;
 - permitted/excluded local data;
-- absence of local-file network upload in the startup path;
-- single-start behavior;
-- diagnostic log bounds;
-- stderr versus terminal-error semantics;
-- failed-start retry prevention;
-- desktop/mobile layout with a stub engine.
+- single-start behavior and terminal startup rejection;
+- diagnostic log bounds and build provenance;
+- desktop/mobile layout and safe waiting state with a stub engine;
+- Stage 2 GDExtension initialization, Stage 3 MEMFS/native filesystem coherence, and the Stage 4 public Pages runtime.
 
 ## Explicitly rejected legacy behavior
 
