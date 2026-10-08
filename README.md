@@ -24,6 +24,7 @@ The browser client requires the player to select their own legitimate Victoria I
 - GitHub Actions dependencies pinned to immutable commit SHAs.
 - Stage 1 artifact layout mirrors `res://bin/openvic/` and includes provenance, the exact patch series, self-verifying checksums and license/notices.
 - Stage 2 exports an official Godot 4.7.2 threaded Web project and proves in Chromium that the OpenVic side module is requested, initialized and registers `OVGame`.
+- Stage 3 proves the browser-to-native filesystem boundary: files mounted under `/vic2` in Emscripten MEMFS are accepted as OpenVic dataloader roots, resolved by native C++ and remain byte-readable.
 
 ## Architecture target
 
@@ -44,9 +45,8 @@ There is no Wine, BoxedWine, x86 emulation, or execution of `v2game.exe` in the 
 [done] clean launcher foundation
 [done] reproducible OpenVic wasm32 side module
 [done] minimal Godot Web export loads and initializes the validated GDExtension
-[next] mount /vic2
-       ↓
-load all definitions
+[done] /vic2 MEMFS → OpenVic Dataloader filesystem boundary
+[next] load all definitions
        ↓
 main menu
        ↓
@@ -59,4 +59,4 @@ advance one game day
 
 No subsystem should be disabled merely to move startup forward. A Web incompatibility must be isolated at the API or platform assumption that causes it and fixed at that boundary.
 
-See `docs/FOUNDATION.md` for engineering rules and `docs/BUILD_STAGE_1.md` for the validated WASM build.
+See `docs/FOUNDATION.md` for engineering rules, `docs/BUILD_STAGE_1.md` for the validated WASM build, `docs/BUILD_STAGE_2.md` for GDExtension initialization and `docs/BUILD_STAGE_3.md` for the validated filesystem boundary.
