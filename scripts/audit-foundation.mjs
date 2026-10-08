@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import {execFileSync} from 'node:child_process';
 
 const root = process.cwd();
 
@@ -70,6 +71,31 @@ for (const rel of required) {
   if (!exists(rel)) fail('required foundation file is missing: ' + rel);
 }
 
+const executableScripts = [
+  'scripts/apply-portability-patches.sh',
+  'scripts/ci/resolve-stage1.sh',
+  'scripts/ci/install-stage1-payload.sh',
+  'scripts/ci/install-godot-web.sh',
+  'scripts/ci/export-godot-web.sh',
+  'scripts/ci/package-stage1.sh',
+];
+for (const rel of executableScripts) {
+  if ((fs.statSync(path.join(root, rel)).mode & 0o111) === 0) {
+    fail('CI shell script lost its executable bit: ' + rel);
+  }
+}
+
+const tracked = execFileSync('git', ['ls-files', '-z'], {cwd: root})
+  .toString('utf8')
+  .split('\0')
+  .filter(Boolean);
+const forbiddenTracked = /\.(?:exe|dll|msi|zip|7z|rar|v2|wasm|pck)$/i;
+for (const rel of tracked) {
+  if (forbiddenTracked.test(rel)) {
+    fail('generated/proprietary binary must not be committed: ' + rel);
+  }
+}
+
 const forbidden = [
   'scripts/patch_openvic_web.py',
   'scripts/prepare_openvic_godot_web.py',
@@ -102,6 +128,12 @@ function walk(dir) {
 }
 
 const actualPatches = walk('patches').filter(rel => rel.endsWith('.patch'));
+for (const rel of actualPatches) {
+  const body = read(rel);
+  for (const token of ['sound.sfx: skipped on Web', 'audio deferred', 'skipping interface', 'skip load_definitions']) {
+    if (body.includes(token)) fail('legacy bypass token found in compatibility patch: ' + rel + ' -> ' + token);
+  }
+}
 if (actualPatches.length !== expectedPatches.size) {
   fail('unexpected patch count: expected ' + expectedPatches.size + ', found ' + actualPatches.length);
 }
