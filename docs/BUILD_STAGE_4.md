@@ -14,13 +14,13 @@ No loader bypass, parser replacement or Stage-4-specific C++ patch is introduced
 
 A successful definition load requires the proprietary Victoria II data set. Those files must not be committed, embedded in an artifact or uploaded to CI.
 
-The automated Stage 4 test therefore proves only the harness boundary:
+The automated Stage 4 test proves the harness boundary:
 
 1. the verified Godot 4.7.2 threaded runtime initializes;
 2. the page is cross-origin isolated;
 3. the local folder picker becomes available;
 4. the loader cannot start before a valid installation is selected;
-5. the export is packaged as a manual-test artifact.
+5. the export is published directly to GitHub Pages.
 
 The success/failure of the real OpenVic loader is a manual browser test using user-supplied local files.
 
@@ -54,14 +54,10 @@ The harness records:
 
 If the loader stalls before `LOAD_RETURN`, the captured log becomes the evidence used to decide whether a narrowly scoped diagnostic patch is justified.
 
-## Manual Windows test
+## Browser test
 
-The CI artifact contains:
+Open the deployed GitHub Pages site, select the root folder of a legitimate Victoria II installation and run the loader.
 
-- the Web export;
-- `serve-local.py`;
-- `run-stage4.bat`.
-
-On Windows, extract the artifact and run `run-stage4.bat`. It starts a localhost server with the COOP/COEP headers required by threaded WebAssembly and opens the Stage 4 page.
+The threaded export enables Godot's official PWA Service Worker with cross-origin isolation headers. On the first visit the page may reload once after the Service Worker is installed. No local server, Python script or batch file is part of the test flow.
 
 The Victoria II files remain local to the browser session.

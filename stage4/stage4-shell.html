@@ -219,12 +219,41 @@ const engine = new Engine(Object.assign({}, GODOT_CONFIG, {
 	},
 }));
 
+async function ensureIsolation() {
+	if (!GODOT_THREADS_ENABLED || globalThis.crossOriginIsolated) {
+		sessionStorage.removeItem('openvic-stage4-isolation-attempts');
+		return true;
+	}
+
+	if (!GODOT_CONFIG.serviceWorker || !('serviceWorker' in navigator)) {
+		throw new Error('O navegador não conseguiu ativar o isolamento necessário para WebAssembly threaded.');
+	}
+
+	engineState.textContent = 'ativando threads…';
+	log('[Stage4] Registrando Service Worker oficial do Godot: ' + GODOT_CONFIG.serviceWorker);
+
+	await navigator.serviceWorker.register(GODOT_CONFIG.serviceWorker);
+	await Promise.race([
+		navigator.serviceWorker.ready,
+		new Promise((_, reject) => setTimeout(() => reject(new Error('Service Worker não ficou pronto em 30s.')), 30000)),
+	]);
+
+	const attempts = Number(sessionStorage.getItem('openvic-stage4-isolation-attempts') || '0');
+	if (attempts >= 2) {
+		throw new Error('O navegador não ativou crossOriginIsolated após registrar o Service Worker.');
+	}
+
+	sessionStorage.setItem('openvic-stage4-isolation-attempts', String(attempts + 1));
+	location.reload();
+	return false;
+}
+
 async function initialize() {
+	if (!(await ensureIsolation())) return;
+
 	const missing = Engine.getMissingFeatures({threads: GODOT_THREADS_ENABLED});
 	if (missing.length) throw new Error('Recursos Web ausentes: ' + missing.join(', '));
-	if (!globalThis.crossOriginIsolated) {
-		throw new Error('Stage 4 requer cross-origin isolation. Use o servidor local incluído no artifact.');
-	}
+
 	await engine.init(GODOT_CONFIG.executable);
 	engineReady = true;
 	engineState.textContent = 'pronto';

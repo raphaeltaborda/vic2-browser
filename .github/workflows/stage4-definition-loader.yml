@@ -14,6 +14,8 @@ on:
 permissions:
   actions: read
   contents: read
+  pages: write
+  id-token: write
 
 concurrency:
   group: stage4-definition-loader-${{ github.ref }}
@@ -137,8 +139,7 @@ jobs:
           test -s build/stage4/index.pck
           grep -Fq 'Stage 4 · OpenVic definition loader' build/stage4/index.html
 
-          cp stage4/serve-local.py build/stage4/
-          cp stage4/run-stage4.bat build/stage4/
+          test -s build/stage4/index.service.worker.js
           find build/stage4 -maxdepth 3 -type f -print | sort
 
       - name: Browser harness smoke test
@@ -149,10 +150,23 @@ jobs:
           test -n "$CHROME"
           node scripts/stage4-browser-smoke.mjs build/stage4
 
-      - name: Upload Stage 4 manual-test artifact
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6
+
+      - name: Upload GitHub Pages artifact
+        uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5
         with:
-          name: openvic-stage4-definition-loader
           path: build/stage4
-          if-no-files-found: error
-          retention-days: 30
+
+  deploy:
+    if: github.ref == 'refs/heads/main'
+    needs: harness
+    runs-on: ubuntu-24.04
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - name: Deploy GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5

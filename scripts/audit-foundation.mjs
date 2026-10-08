@@ -54,8 +54,6 @@ const required = [
   'stage4/Main.gd',
   'stage4/export_presets.cfg',
   'stage4/stage4-shell.html',
-  'stage4/serve-local.py',
-  'stage4/run-stage4.bat',
   'tests/launcher.test.cjs',
   'tests/launcher.browser.cjs',
   'web/openvic-shell.html',
@@ -237,6 +235,14 @@ for (const invariant of [
   if (!stage4Main.includes(invariant)) fail('Stage 4 loader contract is missing: ' + invariant);
 }
 
+const stage4Preset = read('stage4/export_presets.cfg');
+for (const invariant of [
+  'progressive_web_app/enabled=true',
+  'progressive_web_app/ensure_cross_origin_isolation_headers=true',
+]) {
+  if (!stage4Preset.includes(invariant)) fail('Stage 4 Pages isolation preset is missing: ' + invariant);
+}
+
 const stage4Shell = read('stage4/stage4-shell.html');
 for (const invariant of [
   'webkitdirectory',
@@ -246,6 +252,8 @@ for (const invariant of [
   'common/defines.lua',
   'engine.copyToFS',
   '__OPENVIC_STAGE4_WAITING__',
+  'navigator.serviceWorker.register',
+  'openvic-stage4-isolation-attempts',
 ]) {
   if (!stage4Shell.includes(invariant)) fail('Stage 4 browser harness invariant is missing: ' + invariant);
 }
@@ -258,7 +266,8 @@ for (const invariant of [
   'branch=main',
   'sha256sum -c WASM_SHA256',
   'GODOT_VERSION: 4.7.2',
-  'openvic-stage4-definition-loader',
+  'actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346',
+  'actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9',
 ]) {
   if (!stage4Workflow.includes(invariant)) fail('Stage 4 workflow contract is missing: ' + invariant);
 }
