@@ -46,6 +46,16 @@ func _ready() -> void:
 			return
 		print("[Stage3] READ_OK relative=", relative_path, " bytes=", contents.to_utf8_buffer().size())
 
+	var case_resolved: String = game.lookup_file_path("common/stage3case.txt")
+	if case_resolved.is_empty():
+		fail_stage3("OpenVic case-insensitive filename lookup failed")
+		return
+	var case_file := FileAccess.open(case_resolved, FileAccess.READ)
+	if case_file == null or not case_file.get_as_text().contains("STAGE3_CASE_SENTINEL"):
+		fail_stage3("OpenVic case-insensitive lookup resolved unreadable or wrong bytes")
+		return
+	print("[Stage3] CASE_LOOKUP_OK resolved=", case_resolved)
+
 	var missing: String = game.lookup_file_path("common/stage3-file-that-does-not-exist.txt")
 	if not missing.is_empty():
 		fail_stage3("OpenVic resolved a deliberately absent file: " + missing)

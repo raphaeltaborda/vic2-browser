@@ -86,6 +86,7 @@ try {
   console.log('rootsOk=' + has('[Stage3] ROOTS_OK'));
   console.log('lookupOk=' + (consoleLines.filter(line => line.includes('[Stage3] LOOKUP_OK')).length === 2));
   console.log('readOk=' + (consoleLines.filter(line => line.includes('[Stage3] READ_OK')).length === 2));
+  console.log('caseLookupOk=' + has('[Stage3] CASE_LOOKUP_OK'));
   console.log('negativeLookupOk=' + has('[Stage3] NEGATIVE_LOOKUP_OK'));
   console.log('readyMarker=' + has('[Stage3] OPENVIC_FILESYSTEM_READY'));
 
@@ -99,6 +100,7 @@ try {
   if (consoleLines.filter(line => line.includes('[Stage3] READ_OK')).length !== 2) {
     throw new Error('resolved fixture bytes were not readable and intact');
   }
+  if (!has('[Stage3] CASE_LOOKUP_OK')) throw new Error('case-insensitive filename lookup did not pass');
   if (!has('[Stage3] NEGATIVE_LOOKUP_OK')) throw new Error('negative lookup control did not pass');
   if (!has('[Stage3] OPENVIC_FILESYSTEM_READY')) throw new Error('Stage 3 ready marker is missing');
   if (!state.ready || state.failed) throw new Error('Stage 3 project reported failure');

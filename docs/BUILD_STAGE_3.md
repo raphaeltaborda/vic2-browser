@@ -12,9 +12,11 @@ It deliberately does **not** call `load_defines_compatibility_mode()` or `GameMa
 
 CI must not contain Victoria II data. The custom Stage 3 HTML shell therefore creates three original test files in MEMFS after the Godot runtime is initialized and before the project starts:
 
-- `/vic2/v2game.exe` — a six-byte synthetic marker, not an executable;
 - `/vic2/common/defines.lua` — original fixture text containing `STAGE3_DEFINES_SENTINEL`;
+- `/vic2/common/Stage3Case.TXT` — original fixture text used to verify OpenVic's case-insensitive filename fallback;
 - `/vic2/map/definition.csv` — original fixture text containing `STAGE3_MAP_SENTINEL`.
+
+The fixture intentionally does not mount `v2game.exe`, matching the production launcher's policy of using the executable only as an installation-validation marker and never copying it into MEMFS.
 
 No Paradox content is present in the fixture.
 
@@ -27,7 +29,8 @@ The GDScript smoke scene:
 3. requires OpenVic to resolve `common/defines.lua`;
 4. requires OpenVic to resolve `map/definition.csv`;
 5. opens each OpenVic-resolved absolute path and checks its sentinel bytes;
-6. requires a deliberately nonexistent lookup to return an empty path.
+6. resolves `common/stage3case.txt` against the differently cased `Stage3Case.TXT` fixture;
+7. requires a deliberately nonexistent lookup to return an empty path.
 
 The crucial filesystem checks inside OpenVic use `std::filesystem::is_directory` and `std::filesystem::is_regular_file`, so this stage crosses from the JavaScript/Emscripten mount into the native C++ dataloader.
 
@@ -40,6 +43,7 @@ Chromium additionally requires:
 - an actual request for the OpenVic side module;
 - two `LOOKUP_OK` markers;
 - two `READ_OK` markers;
+- the case-insensitive filename lookup marker;
 - the negative lookup marker;
 - the final `OPENVIC_FILESYSTEM_READY` marker;
 - no browser page errors.

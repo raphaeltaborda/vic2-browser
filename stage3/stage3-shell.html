@@ -15,8 +15,8 @@ const GODOT_THREADS_ENABLED = $GODOT_THREADS_ENABLED;
 const canvas = document.getElementById('canvas');
 
 const fixture = new Map([
-	['/vic2/v2game.exe', new Uint8Array([0x53, 0x54, 0x41, 0x47, 0x45, 0x33]).buffer],
 	['/vic2/common/defines.lua', new TextEncoder().encode('-- STAGE3_DEFINES_SENTINEL\nNDefines = {}\n').buffer],
+	['/vic2/common/Stage3Case.TXT', new TextEncoder().encode('STAGE3_CASE_SENTINEL\n').buffer],
 	['/vic2/map/definition.csv', new TextEncoder().encode('province;red;green;blue;name;x\n1;1;2;3;STAGE3_MAP_SENTINEL;x\n').buffer],
 ]);
 

@@ -180,6 +180,7 @@ for (const invariant of [
   'set_compatibility_mode_roots(ROOT)',
   'lookup_file_path(relative_path)',
   '[Stage3] OPENVIC_FILESYSTEM_READY',
+  '[Stage3] CASE_LOOKUP_OK',
   '[Stage3] NEGATIVE_LOOKUP_OK',
 ]) {
   if (!stage3Main.includes(invariant)) fail('Stage 3 OpenVic filesystem proof is missing: ' + invariant);
@@ -190,14 +191,18 @@ if (stage3Main.includes('load_defines_compatibility_mode') || stage3Main.include
 
 const stage3Shell = read('stage3/stage3-shell.html');
 for (const invariant of [
-  '/vic2/v2game.exe',
   '/vic2/common/defines.lua',
+  '/vic2/common/Stage3Case.TXT',
   '/vic2/map/definition.csv',
   'engine.copyToFS(path, bytes)',
   'STAGE3_DEFINES_SENTINEL',
+  'STAGE3_CASE_SENTINEL',
   'STAGE3_MAP_SENTINEL',
 ]) {
   if (!stage3Shell.includes(invariant)) fail('Stage 3 MEMFS fixture invariant is missing: ' + invariant);
+}
+if (stage3Shell.includes('/vic2/v2game.exe')) {
+  fail('Stage 3 must mirror the production launcher and must not mount v2game.exe');
 }
 
 const stage3Preset = read('stage3/export_presets.cfg');
