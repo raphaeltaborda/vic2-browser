@@ -23,6 +23,7 @@ The browser client requires the player to select their own legitimate Victoria I
 - Stage 1 artifact validation for WebAssembly magic, Emscripten `dylink.0`, the `openvic_library_init` entry symbol, and the exact Web library declaration in `openvic.gdextension`.
 - GitHub Actions dependencies pinned to immutable commit SHAs.
 - Stage 1 artifact layout mirrors `res://bin/openvic/` and includes provenance, the exact patch series, self-verifying checksums and license/notices.
+- Stage 2 exports an official Godot 4.7.2 threaded Web project and proves in Chromium that the OpenVic side module is requested, initialized and registers `OVGame`.
 
 ## Architecture target
 
@@ -42,9 +43,8 @@ There is no Wine, BoxedWine, x86 emulation, or execution of `v2game.exe` in the 
 ```text
 [done] clean launcher foundation
 [done] reproducible OpenVic wasm32 side module
-[next] minimal Godot Web export loading the validated GDExtension
-       ↓
-mount /vic2
+[done] minimal Godot Web export loads and initializes the validated GDExtension
+[next] mount /vic2
        ↓
 load all definitions
        ↓
